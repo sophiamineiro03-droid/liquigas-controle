@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#153d36">
+  <title>Liquigás Castelense | Caixa e troco</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar"><div class="brand"><span class="brand-icon" aria-hidden="true">LC</span><div><strong>Liquigás Castelense</strong><small>CONTROLE DE CAIXA · CASTELO DO PIAUÍ</small></div></div><span id="connection" role="status">Verificando conexão…</span></header>
+  <main>
+    <div class="page-heading"><div><span class="eyebrow">ROTINA FINANCEIRA</span><h1>Caixa e fundo de troco</h1><p>Seu dia organizado, do primeiro lançamento ao fechamento.</p></div><button id="export" class="secondary">Exportar cópia dos dados</button></div>
+    <aside class="notice"><strong>Dados locais, neste navegador.</strong> Sem autenticação ou sincronização remota. Use um dispositivo e perfil de navegador restritos à equipe. Exporte cópias regularmente; o armazenamento local não é um backup.</aside>
+    <div class="status-line"><span id="sync" role="status"></span><span id="offline-ready" role="status"></span></div>
+    <div id="message" role="alert" tabindex="-1" hidden></div>
+    <nav class="tabs" aria-label="Seções"><button id="tab-current" aria-current="page">Caixa do dia</button><button id="tab-history">Histórico</button></nav>
+    <section id="current"></section>
+    <section id="history" hidden><div class="section-heading"><h2>Histórico de caixas</h2><label>Filtrar por data<input id="history-date" type="date"></label></div><div id="history-list"></div><div id="history-detail"></div></section>
+  </main>
+  <dialog id="modal"><form id="modal-form"><div class="section-heading"><h2 id="modal-title"></h2><button type="button" id="cancel-modal" class="icon-button" aria-label="Fechar formulário">×</button></div><div id="modal-fields"></div><p id="modal-error" role="alert"></p><div class="dialog-actions"><button type="button" id="cancel" class="secondary">Cancelar</button><button type="submit" id="submit">Confirmar</button></div></form></dialog>
+  <footer>Liquigás Castelense · Controle operacional local <span>Valores em reais (BRL) · Horário de São Paulo</span></footer>
+</body>
+</html>

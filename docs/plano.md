@@ -1,11 +1,17 @@
-# Próximos passos propostos
+# Escopo e evolução
 
-Hipótese de trabalho: sistema interno para uma distribuidora de gás. Confirmar o fluxo operacional antes de implementar regras de negócio.
+## Entregue nesta primeira versão
 
-1. Definir os usuários do sistema e o primeiro fluxo a entregar.
-2. Modelar produtos, estoque de botijões cheios/vazios, clientes e pedidos.
-3. Definir persistência local e estratégia de backup com base nos requisitos.
-4. Implementar um fluxo completo de pedido e movimentação de estoque com testes.
-5. Acrescentar interface, validação de entradas e controle de acesso conforme o uso previsto.
+Caixa diário local, fundo de referência de R$ 100,00 separado do caixa, vendas e troco atômicos, entradas/saídas, transferências internas, reposição, ajustes justificados, estornos rastreáveis, conferência, fechamento imutável na interface, histórico por data, impressão, exportação JSON e persistência offline em IndexedDB.
 
-Decisões pendentes: tipos de produto, formas de pagamento, entregas, número de operadores e necessidade de uso em mais de um dispositivo. Nenhuma integração, hospedagem ou publicação está autorizada por este documento.
+## Próxima evolução, sujeita à definição e autorização
+
+- Autenticação e permissões reais. O responsável atual é um nome autodeclarado.
+- Importação de cópias com validação integral e política explícita de mesclagem; exportação já disponível.
+- Integração Supabase somente após autorização: autenticação, migrações, políticas de acesso, validação das regras no backend e proteção de credenciais.
+- Sincronização real: cada comando terá UUID como chave idempotente, outbox persistida e confirmação do backend. Conflitos de abertura/fechamento não poderão ser mesclados silenciosamente; expedientes fechados devem rejeitar novos comandos. Estado pendente somente muda após confirmação do servidor.
+- Reabertura e correções posteriores ao fechamento exigem política auditável; nesta versão são bloqueadas.
+- Testes em dispositivos móveis reais e de instalação PWA, além dos testes responsivos de Chromium.
+- Estratégia de backup permanente, restauração e recuperação de dispositivo antes do uso como único registro financeiro.
+
+Não implementar estoque, clientes, pedidos ou emissão fiscal nesta fase. Não publicar a aplicação ou configurar serviços externos sem autorização.

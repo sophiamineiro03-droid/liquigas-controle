@@ -30,3 +30,17 @@ test('rotas desconhecidas e métodos não implementados retornam 404', async () 
     }
   });
 });
+
+test('serve a aplicação e assets offline com política de segurança e sem expor arquivos privados', async () => {
+  await withApp(async base => {
+    for (const path of ['/', '/app.js', '/domain.js', '/storage.js', '/sync.js', '/sw.js', '/styles.css', '/manifest.webmanifest', '/icon.svg']) {
+      const response = await fetch(`${base}${path}`);
+      assert.equal(response.status, 200, path);
+      assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+      assert.ok((await response.text()).length > 0);
+    }
+    for (const path of ['/.env', '/.git/config', '/package.json', '/src/server.js', '/constructor', '/toString']) {
+      assert.equal((await fetch(`${base}${path}`)).status, 404, path);
+    }
+  });
+});
