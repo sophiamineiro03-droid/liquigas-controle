@@ -1,5 +1,7 @@
 # Plano de integração: mesma aplicação e mesmo caixa
 
+Atualização: a implementação inicial está em [automatic-sync.md](automatic-sync.md). As seções abaixo registram o plano e as decisões de referência; conta hospedada, ativação e importação histórica continuam exigindo conferência.
+
 Este documento é um plano, não uma sincronização já implementada. `public/storage.js`, `domain.js`, `commerce.js`, formulários e service worker permanecem inalterados nesta etapa. A mudança solicitada para o uso “como caderno” está preparada no banco; ainda precisa de uma etapa de interface.
 
 ## Sequência de desenvolvimento sugerida

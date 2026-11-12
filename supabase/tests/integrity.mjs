@@ -287,6 +287,35 @@ export async function run({sql,sqlAsync}) {
   rejects(()=>call(operator,'lc_apply_operation',[f.unit,dev,id(),{type:'close_commit',dayId:f.day,data:{}}]),/LC_PERMISSION_DENIED/);
   close(f,prepared);
  });
+
+ await test('motor de sincronização JS usa RPCs reais e reconstrói caixa, venda e fechamento',async()=>{
+  const {createSyncEngine}=await import('../../public/sync-engine.js');
+  const {appendOutbox}=await import('../../public/sync-commands.js');
+  const {updateSale}=await import('../../public/commerce.js');
+  const f=fixture();
+  let local=prepareState({revision:0,days:[],remote:{enabled:true,unitId:f.unit,userId:admin,deviceId:f.device,generation:f.generation,cursor:0,hydrated:false,queue:[]}});
+  function query(table){
+   let columns='*',filters=[],orders=[],offset=0,limit=500,single=false;
+   const builder={select(c){columns=c;return this;},eq(k,v){filters.push(`${k}=${arg(v)}`);return this;},order(c){orders.push(c);return this;},range(a,b){offset=a;limit=b-a+1;return this;},single(){single=true;return this;},then(resolve,reject){
+    try {const statement=`select coalesce(jsonb_agg(to_jsonb(t)),'[]') from (select ${columns} from public.${table}${filters.length?' where '+filters.join(' and '):''}${orders.length?' order by '+orders.join(','):''} offset ${offset} limit ${limit}) t`;
+     const rows=parse(sql(as(admin,statement)));return Promise.resolve({data:single?rows[0]:rows}).then(resolve,reject);
+    } catch(error){return Promise.reject(error).then(resolve,reject);}
+   }};return builder;
+  }
+  const client={auth:{getSession:async()=>({data:{session:{user:{id:admin}}}})},from:query,rpc:async(name,args)=>{
+   try{return {data:call(admin,name,Object.values(args))};}catch(e){return {error:{message:e.message,code:'P0001'}};}
+  }};
+  const engine=createSyncEngine({client,read:async()=>structuredClone(local),update:async fn=>(local=fn(structuredClone(local))),online:()=>true});
+  await engine.sync(true);assert.equal(local.remote.hydrated,true,local.remote.lastError);assert.equal(local.days[0].id,f.day);
+  local=appendOutbox(local,createSale(local,saleBody({customer:'',delivery:{driver:'',status:''}}),'Admin'));
+  const saleId=local.business.sales[0].id;await engine.sync(true);
+  assert.equal(local.remote.queue.length,0,local.remote.lastError);assert.equal(f.report().sales,12000);assert.equal(local.business.sales[0].id,saleId);assert.equal(local.business.sales[0].delivery.driver,'');
+  local=appendOutbox(local,updateSale(local,saleId,{customer:'Nome completado'},'Nome','Admin'));await engine.sync(true);
+  assert.equal(local.business.sales[0].entityVersion,2);assert.equal(local.business.sales[0].customer,'Nome completado');
+  await engine.requestClose(f.day,{countedCash:62000,countedFund:10000,notes:''});
+  await engine.sync(true);await engine.sync(true);
+  assert.equal(local.days[0].remoteStatus,'closed',local.remote.lastError);assert.equal(local.days[0].closing.expected.cash,62000);
+ });
  console.log(`Banco: ${passed} testes aprovados; ${failed} falharam.`);
  if(failed) throw new Error(`${failed} testes de banco falharam`);
 }

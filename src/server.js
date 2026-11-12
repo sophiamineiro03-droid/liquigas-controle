@@ -4,6 +4,14 @@ import { readFile } from 'node:fs/promises';
 
 const publicRoot = new URL('../public/', import.meta.url);
 const assets = {
+  '/sync-commands.js': ['sync-commands.js', 'text/javascript; charset=utf-8'],
+  '/sync-engine.js': ['sync-engine.js', 'text/javascript; charset=utf-8'],
+  '/sync-projection.js': ['sync-projection.js', 'text/javascript; charset=utf-8'],
+  '/sync-ui.js': ['sync-ui.js', 'text/javascript; charset=utf-8'],
+  '/supabase-client.js': ['supabase-client.js', 'text/javascript; charset=utf-8'],
+  '/supabase-config.js': ['supabase-config.js', 'text/javascript; charset=utf-8'],
+  '/vendor/supabase.js': ['vendor/supabase.js', 'text/javascript; charset=utf-8'],
+
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/commerce.js': ['commerce.js', 'text/javascript; charset=utf-8'],
@@ -26,7 +34,7 @@ export function createApp() {
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+    response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://zvfqqxrkrrneqxuypioj.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     let pathname;
     try { pathname = new URL(request.url, 'http://localhost').pathname; }
     catch {

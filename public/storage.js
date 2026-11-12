@@ -1,4 +1,5 @@
 import { prepareState } from './commerce.js';
+import { appendOutbox } from './sync-commands.js';
 const DB_NAME = 'liquigas-controle';
 const STORE = 'state';
 let connection;
@@ -38,10 +39,34 @@ export async function save(next, expectedRevision) {
         tx.abort();
         return;
       }
+      try { next = appendOutbox(prepareState(read.result ?? { days: [] }), next); }
+      catch (error) { failure=error; tx.abort(); return; }
       store.put({ ...next, revision: expectedRevision + 1 }, 'ledger');
     };
     tx.oncomplete = () => resolve({ ...next, revision: expectedRevision + 1 });
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(failure ?? tx.error ?? new Error('Falha ao salvar os dados.'));
+  });
+}
+
+// Metadados de sincronização e projeções remotas compartilham a transação do ledger.
+// Nunca chamar save() para aplicar uma resposta remota: isso criaria novo comando.
+export async function updateStored(transform) {
+  const db = await database();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,'readwrite'), store=tx.objectStore(STORE);
+    let result, failure;
+    const request=store.get('ledger');
+    request.onsuccess=()=>{
+      try {
+        const current=prepareState(request.result ?? { version:1,revision:0,days:[] });
+        const next=transform(structuredClone(current));
+        if (!next || JSON.stringify(next)===JSON.stringify(current)) {result=current;return;}
+        result={...next,revision:(current.revision??0)+1}; store.put(result,'ledger');
+      } catch(error) {failure=error;tx.abort();}
+    };
+    tx.oncomplete=()=>resolve(result);
+    tx.onerror=()=>reject(tx.error);
+    tx.onabort=()=>reject(failure??tx.error);
   });
 }
