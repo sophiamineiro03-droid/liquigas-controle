@@ -23,7 +23,8 @@ function putDay(state, day) { state.days = state.days.map(item => item.id === da
 function audit(state, type, entityId, user, reason, before, after) {
   state.business.events.push({ id: id(), type, entityId, createdAt: now(), user: text(user, 'Responsável', true, 100), reason: text(reason, 'Motivo'), before, after, syncStatus: 'pending' });
 }
-function delivery(input) {
+function delivery(input = {}) {
+  input = { ...input, driver: input.driver ?? '', status: input.status ?? '' };
   if (!DRIVERS.includes(input.driver)) throw new Error('Selecione o responsável pela entrega/retirada.');
   const status = option(input.status, DELIVERY, 'Situação da entrega');
   if (status === 'canceled') throw new Error('Para cancelar, use Cancelar e estornar.');
@@ -125,7 +126,21 @@ export function cancelSale(state, saleId, reason, user) {
 }
 export function updateSale(state, saleId, input, reason, user) {
   const next = working(state), sale = findSale(next, saleId);
-  const revised = { ...sale, delivery: delivery(input.delivery), notes: text(input.notes ?? '', 'Observações', false), address: sale.address, posted: input.posted, updatedAt: now() };
+  const address = { ...sale.address };
+  if (Object.hasOwn(input, 'address')) {
+    if (!input.address || typeof input.address !== 'object' || Array.isArray(input.address)) throw new Error('Endereço inválido.');
+    for (const key of ['district', 'street', 'number', 'extra', 'reference']) {
+      if (Object.hasOwn(input.address, key)) address[key] = text(input.address[key], 'Endereço', false, 200);
+    }
+  }
+  const revised = {
+    ...sale, address,
+    customer: Object.hasOwn(input, 'customer') ? text(input.customer, 'Cliente', false, 100) : sale.customer,
+    delivery: delivery({ ...sale.delivery, ...input.delivery }),
+    notes: Object.hasOwn(input, 'notes') ? text(input.notes, 'Observações', false) : sale.notes,
+    posted: Object.hasOwn(input, 'posted') ? input.posted : sale.posted, updatedAt: now(),
+  };
+  if (sale.fee && revised.delivery.driver === 'Depósito') throw new Error('Taxa de entrega exige um responsável por entrega, não retirada no depósito.');
   if (typeof revised.posted !== 'boolean') throw new Error('Informe a situação no RevGás.');
   next.business.sales = next.business.sales.map(s => s.id === saleId ? revised : s);
   audit(next, 'saleUpdated', saleId, user, reason, sale, revised);

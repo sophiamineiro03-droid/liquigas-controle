@@ -244,3 +244,31 @@ test('benefício e água são cadastrados juntos sem transformar o benefício em
   expect(r.payments.benefit).toBe(10798); expect(r.payments.pix).toBe(1000);
   expect(r.physical.total).toBe(60000);
 });
+
+test('completa cliente e endereço após fechamento sem reescrever caixa', async ({ page }) => {
+  await open(page);
+  await regularSale(page, 'cash', '');
+  await page.getByRole('button', { name: 'Conferir e fechar caixa', exact: true }).click();
+  await page.getByLabel('Caixa contado — fora do fundo (R$)', { exact: true }).fill('620,00');
+  await page.getByLabel('Fundo de troco contado (R$)', { exact: true }).fill('100,00');
+  await page.locator('#submit').click();
+  await expect(page.locator('dialog')).not.toBeVisible();
+  const before = await state(page);
+  await page.locator('#tab-sales').click();
+  await page.locator('#sales-list [data-update-sale]').click();
+  await page.getByLabel('Nome do cliente', { exact: true }).fill('Maria');
+  await page.getByLabel('Bairro', { exact: true }).fill('Centro');
+  await page.getByLabel('Rua', { exact: true }).fill('Rua Nova');
+  await page.getByLabel('Número', { exact: true }).fill('12');
+  await page.getByLabel('Motivo da atualização', { exact: true }).fill('Cliente completou os dados');
+  await page.locator('#submit').click();
+  await expect(page.locator('dialog')).not.toBeVisible();
+  await page.reload();
+  const after = await state(page);
+  expect(after.days).toEqual(before.days);
+  expect(after.business.sales[0].id).toBe(before.business.sales[0].id);
+  expect(after.business.sales[0].customer).toBe('Maria');
+  expect(after.business.sales[0].address).toMatchObject({ district: 'Centro', street: 'Rua Nova', number: '12' });
+  expect(after.business.events.at(-1).before.customer).toBe('');
+  expect(after.business.events.at(-1).after.customer).toBe('Maria');
+});

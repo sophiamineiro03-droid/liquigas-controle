@@ -170,3 +170,40 @@ test('P13 pelo benefício e água ou P13 normais coexistem com pagamentos discri
   assert.equal(r.categories.gas.sold, 23798); assert.equal(r.categories.water.sold, 2000);
   assert.equal(r.physical.cash, 62000); assert.equal(r.physical.fund, 10000);
 });
+
+test('completar cliente e endereço após fechar preserva financeiro, fechamento e auditoria', () => {
+  let state = createSale(start(), fields({ customer: '', address: { district: 'Centro', street: 'Antiga' } }), user);
+  state.days[0] = closeDay(state.days[0], { countedCash: 62000, countedFund: 10000, user });
+  const before = structuredClone(state), saleId = sale(state).id;
+  state = updateSale(state, saleId, { customer: 'Maria', address: { street: 'Nova', number: '12' } }, 'Cliente informou endereço', user);
+  assert.deepEqual(state.days, before.days);
+  assert.deepEqual(sale(state).items, sale(before).items);
+  assert.deepEqual(sale(state).payments, sale(before).payments);
+  assert.equal(sale(state).movementId, sale(before).movementId);
+  assert.equal(sale(state).customer, 'Maria');
+  assert.equal(sale(state).address.district, 'Centro');
+  assert.equal(sale(state).address.street, 'Nova');
+  assert.equal(sale(state).address.number, '12');
+  assert.deepEqual(sale(state).delivery, sale(before).delivery);
+  assert.equal(state.business.events.at(-1).before.customer, '');
+  assert.equal(state.business.events.at(-1).after.customer, 'Maria');
+  assert.throws(() => updateSale(state, saleId, { address: [] }, 'Inválido', user));
+  assert.throws(() => updateSale(state, saleId, { customer: 'a'.repeat(101) }, 'Inválido', user));
+});
+
+test('atualização de entrega rejeita depósito com taxa sem perder dados ou financeiro', () => {
+  const state = createSale(start(), fields({ items: [{ product: 'p13', quantity: 1, total: 10798, benefit: true }], payments: [{ category: 'gas', method: 'benefit', amount: 10798 }], fee: { amount: 1000, method: 'pix', status: 'paid' }, delivery: { driver: 'Wagner', status: 'awaiting' } }), user);
+  const before = structuredClone(state);
+  assert.throws(() => updateSale(state, sale(state).id, { delivery: { driver: 'Depósito', status: 'pickup' } }, 'Retirada', user), /Taxa de entrega/);
+  assert.deepEqual(state, before);
+  const updated = updateSale(state, sale(state).id, { delivery: { driver: 'Vinicius' } }, 'Troca de entregador', user);
+  assert.equal(sale(updated).delivery.status, 'awaiting');
+  assert.deepEqual(sale(updated).fee, sale(state).fee);
+});
+
+test('venda aceita entrega desconhecida em formato SQL sem inventar responsável', () => {
+  const state = createSale(start(), fields({ delivery: { driver: null, status: null } }), user);
+  assert.equal(sale(state).delivery.driver, '');
+  assert.equal(sale(state).delivery.status, '');
+  assert.equal(daily(state).deliveries, 1);
+});
