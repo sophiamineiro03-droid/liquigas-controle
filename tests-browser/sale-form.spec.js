@@ -11,6 +11,7 @@ async function newSale(page) {
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
   await page.getByLabel('Nome do cliente', { exact: true }).fill('Maria');
   await page.getByLabel('Total da linha (R$)', { exact: true }).fill('120,00');
+  await page.getByLabel('Forma de pagamento', { exact: true }).selectOption('cash');
 }
 const data = page => page.evaluate(async () => (await import('/storage.js')).load());
 
@@ -23,10 +24,10 @@ test('venda comum exige só cliente e total; pagamento e atendente já estão pr
   await expect(page.getByLabel('Nome do entregador', { exact: true })).not.toBeVisible();
   await expect(page.locator('#sale-recorder')).toContainText('Sophia');
   await expect(page.getByLabel('Retirar troco de', { exact: true })).not.toBeVisible();
-  const saveButton = page.getByRole('button', { name: 'Registrar venda', exact: true });
+  const saveButton = page.getByRole('button', { name: 'Confirmar venda', exact: true });
   await expect(saveButton).toBeInViewport();
   await page.locator('#modal').screenshot({ path: '/tmp/liquigas-formulario-simples.png' });
-  await page.getByRole('button', { name: 'Registrar venda', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmar venda', exact: true }).click();
   await expect(page.locator('dialog')).not.toBeVisible();
   const sale = (await data(page)).business.sales[0];
   expect(sale.user).toBe('Sophia'); expect(sale.items[0].quantity).toBe(1);
@@ -43,7 +44,7 @@ test('um único Pix paga gás e água sem digitar o valor recebido de novo', asy
   await expect(page.locator('#cash-fields')).not.toBeVisible();
   await expect(page.locator('#payment-summary')).toContainText('Gás:');
   await expect(page.locator('#payment-summary')).toContainText('Água:');
-  await page.locator('#submit').click();
+  await page.locator('[data-confirm-sale]').click();
   await expect(page.locator('dialog')).not.toBeVisible();
   const stored = await data(page);
   expect(stored.business.sales[0].payments).toEqual([{category:'gas',method:'pix',amount:12000},{category:'water',method:'pix',amount:1000}]);
@@ -57,7 +58,7 @@ test('troco aparece só com dinheiro e não fica registrado ao trocar para cart�
   await expect(page.getByLabel('Retirar troco de', { exact: true })).toBeVisible();
   await page.getByLabel('Forma de pagamento', { exact: true }).selectOption('debit');
   await expect(page.locator('#cash-fields')).not.toBeVisible();
-  await page.locator('#submit').click();
+  await page.locator('[data-confirm-sale]').click();
   await expect(page.locator('dialog')).not.toBeVisible();
   const sale = (await data(page)).business.sales[0];
   expect(sale.tendered).toBe(0); expect(sale.change).toBe(0); expect(sale.payments[0].method).toBe('debit');
@@ -73,18 +74,18 @@ test('divisão manual continua explícita e valores não são sobrescritos ao ed
   await page.getByLabel('Total da linha (R$)').fill('130,00');
   await expect(page.locator('.payment-row').first().getByLabel('Valor (R$)')).toHaveValue('50,00');
   await expect(page.locator('#allocation-summary')).toContainText('10,00');
-  await page.locator('#submit').click();
+  await page.locator('[data-confirm-sale]').click();
   await expect(page.locator('#modal-error')).toContainText('devem somar exatamente');
   expect((await data(page)).business.sales).toHaveLength(0);
   await page.locator('.payment-row').nth(1).getByLabel('Valor (R$)').fill('80,00');
-  await page.locator('#submit').click();
+  await page.locator('[data-confirm-sale]').click();
   await expect(page.locator('dialog')).not.toBeVisible();
   expect((await data(page)).business.sales[0].payments.map(p => p.amount)).toEqual([5000,8000]);
 });
 
 test('entregador define opções de situação, sem presumir entrega realizada', async ({ page }) => {
   await opening(page); await newSale(page);
-  await expect(page.getByLabel('Situação', { exact: true })).toHaveValue('pickup');
+  await expect(page.getByLabel('Situação', { exact: true })).toHaveValue('');
   await page.getByLabel('Quem entrega / retirada no local', { exact: true }).selectOption('Wagner');
   await expect(page.getByLabel('Situação', { exact: true })).toHaveValue('awaiting');
   await expect(page.getByLabel('Nome do entregador', { exact: true })).not.toBeVisible();
@@ -93,7 +94,7 @@ test('entregador define opções de situação, sem presumir entrega realizada',
   await page.getByLabel('Nome do entregador', { exact: true }).fill('Entregador extra');
   await page.getByLabel('Quem entrega / retirada no local', { exact: true }).selectOption('Depósito');
   await expect(page.getByLabel('Situação', { exact: true })).toHaveValue('pickup');
-  await page.locator('#submit').click();
+  await page.locator('[data-confirm-sale]').click();
   await expect(page.locator('dialog')).not.toBeVisible();
   const sale = (await data(page)).business.sales[0];
   expect(sale.delivery.driverOther).toBe(''); expect(sale.delivery.status).toBe('pickup');
@@ -108,7 +109,7 @@ test('benefício preenche o preço e esconde controles de pagamento que não se 
   await expect(page.getByLabel('Total da linha (R$)')).toHaveValue('215,96');
   await expect(page.locator('#normal-payments')).not.toBeVisible();
   await expect(page.locator('#cash-fields')).not.toBeVisible();
-  await page.locator('#submit').click();
+  await page.locator('[data-confirm-sale]').click();
   await expect(page.locator('dialog')).not.toBeVisible();
   expect((await data(page)).business.sales[0].payments).toEqual([{category:'gas',method:'benefit',amount:21596}]);
 });
@@ -121,7 +122,7 @@ test('formulário rápido cabe no celular e preserva dados opcionais', async ({ 
   await page.getByLabel('Bairro', { exact: true }).fill('Centro');
   expect(await page.evaluate(() => document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.locator('#modal').screenshot({path:'/tmp/liquigas-formulario-celular.png'});
-  await page.locator('#submit').click();
+  await page.locator('[data-confirm-sale]').click();
   await expect(page.locator('dialog')).not.toBeVisible();
   const sale = (await data(page)).business.sales[0];
   expect(sale.address.district).toBe('Centro'); expect(sale.notes).toBe('Retirar à tarde');

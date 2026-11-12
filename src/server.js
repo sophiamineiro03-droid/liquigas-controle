@@ -7,6 +7,7 @@ const assets = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/commerce.js': ['commerce.js', 'text/javascript; charset=utf-8'],
+  '/notebook.js': ['notebook.js', 'text/javascript; charset=utf-8'],
   '/sale-form.js': ['sale-form.js', 'text/javascript; charset=utf-8'],
   '/commerce-ui.js': ['commerce-ui.js', 'text/javascript; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],

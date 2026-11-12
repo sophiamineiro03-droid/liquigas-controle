@@ -6,10 +6,11 @@ export const PRODUCTS = {
 };
 export const METHODS = { cash: 'Dinheiro', pix: 'Pix', debit: 'Débito', credit: 'Crédito', creditSale: 'Fiado / A receber', benefit: 'Gás do Povo' };
 export const CATEGORIES = { gas: 'Gás', water: 'Água' };
-export const DELIVERY = { awaiting: 'Aguardando entrega', out: 'Saiu para entrega', delivered: 'Entregue', pickup: 'Aguardando retirada', collected: 'Retirado no depósito', canceled: 'Cancelado' };
-export const DRIVERS = ['Wagner', 'Vinicius', 'Depósito', 'Outro'];
+export const DELIVERY = { '': 'A definir', awaiting: 'Aguardando entrega', out: 'Saiu para entrega', delivered: 'Entregue', pickup: 'Aguardando retirada', collected: 'Retirado no depósito', canceled: 'Cancelado' };
+export const DRIVERS = ['', 'Wagner', 'Vinicius', 'Depósito', 'Outro'];
 export function prepareState(state) {
-  return { ...state, business: state.business ?? { schemaVersion: 1, benefitPrice: 10798, sales: [], receipts: [], events: [] } };
+  const business=state.business ?? { schemaVersion: 1, benefitPrice: 10798, sales: [], receipts: [], events: [] };
+  return { ...state, business: { ...business, drafts: business.drafts ?? [] } };
 }
 const working = state => structuredClone(prepareState(state));
 const id = () => crypto.randomUUID();
@@ -26,7 +27,7 @@ function delivery(input) {
   if (!DRIVERS.includes(input.driver)) throw new Error('Selecione o responsável pela entrega/retirada.');
   const status = option(input.status, DELIVERY, 'Situação da entrega');
   if (status === 'canceled') throw new Error('Para cancelar, use Cancelar e estornar.');
-  const driverOther = text(input.driverOther ?? '', 'Nome do responsável pela entrega', input.driver === 'Outro', 100);
+  const driverOther = text(input.driverOther ?? '', 'Nome do responsável pela entrega', false, 100);
   return { driver: input.driver, driverOther, status };
 }
 function normalizeSale(state, input) {
@@ -74,7 +75,7 @@ function normalizeSale(state, input) {
   if (fee && deliveryInfo.driver === 'Depósito') throw new Error('Taxa de entrega exige um responsável por entrega, não retirada no depósito.');
   if (typeof input.posted !== 'boolean') throw new Error('Informe a situação no RevGás.');
   return {
-    customer: text(input.customer, 'Cliente', true, 100), items, payments, totals, fee, benefitPrice,
+    customer: text(input.customer ?? '', 'Cliente', false, 100), items, payments, totals, fee, benefitPrice,
     tendered, change: tendered - cash, changeFrom: input.changeFrom ?? 'fund', cash,
     notes: text(input.notes ?? '', 'Observações', false), address, delivery: deliveryInfo, posted: input.posted,
   };
@@ -86,9 +87,10 @@ function bookSale(state, day, sale, user) {
   const result = recordCommerceCash(day, { type: 'operationalSale', commerceId: sale.id, entries, user, description: `Venda: ${sale.customer}` });
   putDay(state, result.day); sale.movementId = result.movementId;
 }
-export function createSale(state, input, user) {
+export function createSale(state, input, user, suppliedId = null) {
   const next = working(state), day = open(next);
-  const sale = { ...normalizeSale(next, { ...input, benefitPrice: next.business.benefitPrice }), id: id(), dayId: day.id, createdAt: now(), user: text(user, 'Responsável', true, 100), canceled: false, syncStatus: 'pending' };
+  if (suppliedId && (!/^[0-9a-f-]{36}$/i.test(suppliedId) || next.business.sales.some(s=>s.id===suppliedId))) throw new Error('Esta venda já foi confirmada ou tem identificador inválido.');
+  const sale = { ...normalizeSale(next, { ...input, benefitPrice: next.business.benefitPrice }), id: suppliedId ?? id(), dayId: day.id, createdAt: now(), user: text(user, 'Responsável', true, 100), canceled: false, syncStatus: 'pending' };
   bookSale(next, day, sale, user);
   next.business.sales.push(sale);
   audit(next, 'saleCreated', sale.id, user, 'Cadastro de venda', null, sale);

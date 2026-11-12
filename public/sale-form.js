@@ -1,12 +1,14 @@
+import { saveDraft, confirmDraft } from './notebook.js';
 import { money } from './domain.js';
-import { PRODUCTS, METHODS, CATEGORIES, DELIVERY, DRIVERS, createSale, editSale } from './commerce.js';
+import { PRODUCTS, METHODS, CATEGORIES, DELIVERY, DRIVERS, editSale } from './commerce.js';
 
 const $ = selector => document.querySelector(selector);
 const rows = selector => [...document.querySelectorAll(selector)];
 const NORMAL_METHODS = Object.fromEntries(Object.entries(METHODS).filter(([key]) => key !== 'benefit'));
 
 export function openSaleForm(ui, saleId) {
-  if (!ui.active()) throw new Error('Abra um caixa para cadastrar uma venda.');
+  const draft=ui.state().business.drafts.find(d=>d.id===saleId);
+  const annotationId=draft?.id ?? crypto.randomUUID();
   const sale = ui.state().business.sales.find(item => item.id === saleId);
   const price = sale?.benefitPrice ?? ui.state().business.benefitPrice;
   const normalPayments = sale?.payments.filter(p => p.method !== 'benefit') ?? [];
@@ -15,14 +17,14 @@ export function openSaleForm(ui, saleId) {
   let splitInitialized = splitInitially;
   const { esc, currency, inputMoney, select } = ui;
   function itemRow(item = { product: 'p13', quantity: 1, total: '' }) {
-    return `<div class="item-row">${select('product', 'Produto', Object.fromEntries(Object.entries(PRODUCTS).map(([key,p]) => [key,p.name])), item.product)}${ui.field('quantity','Quantidade','number',item.quantity,'required min="1" max="99999" step="1"')}${ui.amount('itemTotal','Total da linha (R$)',typeof item.total === 'number' ? inputMoney(item.total) : '')}<label class="check item-benefit"><input type="checkbox" name="benefitItem" ${item.benefit ? 'checked' : ''}> Este P13 é pelo benefício</label><button type="button" class="secondary remove-row">Remover produto</button></div>`;
+    return `<div class="item-row">${select('product', 'Produto', Object.fromEntries(Object.entries(PRODUCTS).map(([key,p]) => [key,p.name])), item.product)}${ui.field('quantity','Quantidade','number',item.quantity,'required min="1" max="99999" step="1"')}${ui.amount('itemTotal','Total da linha (R$)',typeof item.total === 'number' ? inputMoney(item.total) : (item.total ?? ''))}<label class="check item-benefit"><input type="checkbox" name="benefitItem" ${item.benefit ? 'checked' : ''}> Este P13 é pelo benefício</label><button type="button" class="secondary remove-row">Remover produto</button></div>`;
   }
   function paymentRow(payment = { category: 'gas', method: 'cash', amount: '' }) {
-    return `<div class="payment-row">${select('category','Categoria',CATEGORIES,payment.category)}${select('method','Forma',NORMAL_METHODS,payment.method)}${ui.amount('paymentAmount','Valor (R$)',typeof payment.amount === 'number' ? inputMoney(payment.amount) : '')}<button type="button" class="secondary remove-row">Remover pagamento</button></div>`;
+    return `<div class="payment-row">${select('category','Categoria',CATEGORIES,payment.category)}${select('method','Forma',NORMAL_METHODS,payment.method)}${ui.amount('paymentAmount','Valor (R$)',typeof payment.amount === 'number' ? inputMoney(payment.amount) : (payment.amount ?? ''))}<button type="button" class="secondary remove-row">Remover pagamento</button></div>`;
   }
-  const delivery = sale?.delivery ?? { driver: 'Depósito', driverOther: '', status: 'pickup' };
+  const delivery = sale?.delivery ?? { driver: '', driverOther: '', status: '' };
   const hasAddress = sale && Object.values(sale.address).some(Boolean);
-  const fields = `<div class="sale-form-intro">${ui.field('customer','Nome do cliente','text',sale?.customer ?? '', 'required maxlength="100" autocomplete="off"')}</div><h3>Produtos</h3><div id="item-rows">${(sale?.items ?? [{}]).map(item => itemRow(item.product ? { ...item, benefit: item.benefit ?? (isBenefit && item.product === 'p13') } : undefined)).join('')}</div><button type="button" id="add-item" class="secondary">Adicionar produto</button><div id="sale-totals" class="sale-total" aria-live="polite">Informe o total da linha para calcular a venda.</div><h3>Pagamento</h3><label class="check"><input id="benefit-mode" type="checkbox" ${isBenefit ? 'checked' : ''}> Gás do Povo</label><p id="benefit-help" class="muted" hidden>P13 pelo benefício: ${currency(price)} por unidade, calculado automaticamente. Se apenas parte dos P13 usar o benefício, separe em linhas.</p><div id="normal-payments">${select('simpleMethod','Forma de pagamento',NORMAL_METHODS,normalPayments[0]?.method ?? 'cash')}<label class="check"><input type="checkbox" id="split-payment" ${splitInitially ? 'checked' : ''}> Dividir pagamento</label><div id="split-fields" hidden><p class="muted">Informe cada parte. Em vendas mistas, selecione gás ou água; o sistema não divide os valores por conta própria.</p><div id="payment-rows">${(splitInitially ? normalPayments : []).map(paymentRow).join('')}</div><button type="button" id="add-payment" class="secondary">Adicionar outra forma</button><p id="allocation-summary" class="help" aria-live="polite"></p></div><p id="payment-summary" class="muted" aria-live="polite"></p></div><div id="benefit-fee" hidden><label class="check"><input type="checkbox" id="has-fee" ${sale?.fee ? 'checked' : ''}> Cobrar taxa de entrega</label><div id="fee-fields">${ui.amount('feeAmount','Taxa de entrega (R$)',sale?.fee ? inputMoney(sale.fee.amount) : '')}<div class="grid-two">${select('feeMethod','Pagamento da taxa',NORMAL_METHODS,sale?.fee?.method ?? 'cash')}${select('feeStatus','Situação da taxa',{paid:'Paga',pending:'Pendente'},sale?.fee?.status ?? 'paid')}</div></div></div><div id="cash-fields">${ui.field('tendered','Cliente entregou em dinheiro (R$)','text',sale?.tendered ? inputMoney(sale.tendered) : '', 'inputmode="decimal" maxlength="13" placeholder="Vazio = valor exato"')}<p id="order-change" class="help" aria-live="polite"></p><div id="change-account">${select('changeFrom','Retirar troco de',{fund:'Fundo de troco',cash:'Caixa das vendas'},sale?.changeFrom ?? 'fund')}</div></div><h3>Entrega ou retirada</h3><div class="grid-two">${select('driver','Quem entrega / retirada no local',Object.fromEntries(DRIVERS.map(driver => [driver,driver === 'Depósito' ? 'Depósito — retirada no local' : driver])),delivery.driver)}${select('deliveryStatus','Situação',Object.fromEntries(Object.entries(DELIVERY).filter(([key]) => key !== 'canceled')),delivery.status)}</div><div id="other-driver">${ui.field('driverOther','Nome do entregador','text',delivery.driverOther,'maxlength="100"')}</div><details id="sale-extras"><summary>Observações e endereço${sale?.notes || hasAddress ? ' · preenchidos' : ' (opcional)'}</summary><label>Observações da venda<textarea name="notes" maxlength="500" rows="2">${esc(sale?.notes ?? '')}</textarea></label><div class="grid-two">${[['district','Bairro'],['street','Rua'],['number','Número'],['extra','Complemento'],['reference','Referência']].map(([key,title]) => ui.field(key,title,'text',sale?.address[key] ?? '', 'maxlength="200"')).join('')}</div></details><details id="sale-registration"><summary>Atendente e RevGás</summary>${ui.userField()}${select('posted','Lançamento no RevGás',{no:'Ainda não lançada',yes:'Já lançada'},sale?.posted ? 'yes' : 'no')}</details><p id="sale-recorder" class="muted"></p>${sale ? ui.field('reason','Justificativa da correção','text','','required maxlength="500"') : ''}`;
+  const fields = `<div class="sale-form-intro">${ui.field('customer','Nome do cliente','text',sale?.customer ?? '', 'maxlength="100" autocomplete="off"')}</div><h3>Produtos</h3><div id="item-rows">${(sale?.items ?? [{}]).map(item => itemRow(item.product ? { ...item, benefit: item.benefit ?? (isBenefit && item.product === 'p13') } : undefined)).join('')}</div><button type="button" id="add-item" class="secondary">Adicionar produto</button><div id="sale-totals" class="sale-total" aria-live="polite">Informe o total da linha para calcular a venda.</div><h3>Pagamento</h3><label class="check"><input id="benefit-mode" type="checkbox" ${isBenefit ? 'checked' : ''}> Gás do Povo</label><p id="benefit-help" class="muted" hidden>P13 pelo benefício: ${currency(price)} por unidade, calculado automaticamente. Se apenas parte dos P13 usar o benefício, separe em linhas.</p><div id="normal-payments">${select('simpleMethod','Forma de pagamento',{ '': 'A definir', ...NORMAL_METHODS },normalPayments[0]?.method ?? '')}<label class="check"><input type="checkbox" id="split-payment" ${splitInitially ? 'checked' : ''}> Dividir pagamento</label><div id="split-fields" hidden><p class="muted">Informe cada parte. Em vendas mistas, selecione gás ou água; o sistema não divide os valores por conta própria.</p><div id="payment-rows">${(splitInitially ? normalPayments : []).map(paymentRow).join('')}</div><button type="button" id="add-payment" class="secondary">Adicionar outra forma</button><p id="allocation-summary" class="help" aria-live="polite"></p></div><p id="payment-summary" class="muted" aria-live="polite"></p></div><div id="benefit-fee" hidden><label class="check"><input type="checkbox" id="has-fee" ${sale?.fee ? 'checked' : ''}> Cobrar taxa de entrega</label><div id="fee-fields">${ui.amount('feeAmount','Taxa de entrega (R$)',sale?.fee ? inputMoney(sale.fee.amount) : '')}<div class="grid-two">${select('feeMethod','Pagamento da taxa',NORMAL_METHODS,sale?.fee?.method ?? 'cash')}${select('feeStatus','Situação da taxa',{paid:'Paga',pending:'Pendente'},sale?.fee?.status ?? 'paid')}</div></div></div><div id="cash-fields">${ui.field('tendered','Cliente entregou em dinheiro (R$)','text',sale?.tendered ? inputMoney(sale.tendered) : '', 'inputmode="decimal" maxlength="13" placeholder="Vazio = valor exato"')}<p id="order-change" class="help" aria-live="polite"></p><div id="change-account">${select('changeFrom','Retirar troco de',{fund:'Fundo de troco',cash:'Caixa das vendas'},sale?.changeFrom ?? 'fund')}</div></div><h3>Entrega ou retirada</h3><div class="grid-two">${select('driver','Quem entrega / retirada no local',Object.fromEntries(DRIVERS.map(driver => [driver,driver === 'Depósito' ? 'Depósito — retirada no local' : driver || 'A definir'])),delivery.driver)}${select('deliveryStatus','Situação',Object.fromEntries(Object.entries(DELIVERY).filter(([key]) => key !== 'canceled')),delivery.status)}</div><div id="other-driver">${ui.field('driverOther','Nome do entregador','text',delivery.driverOther,'maxlength="100"')}</div><details id="sale-extras"><summary>Observações e endereço${sale?.notes || hasAddress ? ' · preenchidos' : ' (opcional)'}</summary><label>Observações da venda<textarea name="notes" maxlength="500" rows="2">${esc(sale?.notes ?? '')}</textarea></label><div class="grid-two">${[['district','Bairro'],['street','Rua'],['number','Número'],['extra','Complemento'],['reference','Referência']].map(([key,title]) => ui.field(key,title,'text',sale?.address[key] ?? '', 'maxlength="200"')).join('')}</div></details><details id="sale-registration"><summary>Atendente e RevGás</summary>${ui.userField()}${select('posted','Lançamento no RevGás',{no:'Ainda não lançada',yes:'Já lançada'},sale?.posted ? 'yes' : 'no')}</details><p id="sale-recorder" class="muted"></p>${sale ? ui.field('reason','Justificativa da correção','text','','required maxlength="500"') : ''}`;
 
   function parseItems() {
     return rows('.item-row').map(row => ({ product: row.querySelector('[name=product]').value, quantity: Number(row.querySelector('[name=quantity]').value), total: money(row.querySelector('[name=itemTotal]').value), benefit: $('#benefit-mode').checked && row.querySelector('[name=benefitItem]').checked }));
@@ -47,7 +49,30 @@ export function openSaleForm(ui, saleId) {
     const fee = $('#has-fee').checked ? { amount: money(values.feeAmount), method: values.feeMethod, status: values.feeStatus } : null;
     return { customer: values.customer, items, payments: allocated, fee, tendered: values.tendered ? money(values.tendered) : undefined, changeFrom: values.changeFrom ?? 'fund', delivery: {driver: values.driver,driverOther: values.driverOther ?? '',status: values.deliveryStatus}, notes: values.notes, address: Object.fromEntries(['district','street','number','extra','reference'].map(key => [key,values[key]])), posted: values.posted === 'yes' };
   }
-  ui.openModal(sale ? 'Corrigir venda' : 'Nova venda', fields, async values => ui.commit(next => sale ? editSale(next,sale.id,input(values),values.reason,values.user) : createSale(next,input(values),values.user)), sale ? 'Salvar correção' : 'Registrar venda');
+  function rawDocument(){
+    return {fields:Object.fromEntries(rows('#modal-fields [name]').map(el=>[el.name,el.value])),items:rows('.item-row').map(row=>({product:row.querySelector('[name=product]').value,quantity:row.querySelector('[name=quantity]').value,total:row.querySelector('[name=itemTotal]').value,benefit:row.querySelector('[name=benefitItem]').checked})),payments:rows('.payment-row').map(row=>({category:row.querySelector('[name=category]').value,method:row.querySelector('[name=method]').value,amount:row.querySelector('[name=paymentAmount]').value})),benefitMode:$('#benefit-mode').checked,splitPayment:$('#split-payment').checked,hasFee:$('#has-fee').checked};
+  }
+  ui.openModal(sale ? 'Corrigir venda' : draft ? 'Completar anotação' : 'Nova venda / anotação', '<p class="help">Pode anotar agora e completar depois. Só Confirmar venda altera o financeiro.</p>'+fields, async (values,options={}) => { const saved=await ui.commit(next => {
+    const user=values.user || ui.active()?.user || 'Não informado';
+    if(options.saveDraft) return saveDraft(next,annotationId,rawDocument(),user,draft?.version??null);
+    return sale ? editSale(next,sale.id,input(values),values.reason,user) : confirmDraft(next,annotationId,input(values),user);
+  }); if(saved && options.saveDraft)ui.showTab('sales'); return saved; },sale ? 'Salvar correção' : 'Salvar anotação');
+  if(!sale){
+    $('#submit').dataset.saveDraft='true'; $('#submit').formNoValidate=true;
+    $('#modal-fields').querySelectorAll('[required]').forEach(el=>{el.required=false;});
+    $('#submit').insertAdjacentHTML('beforebegin','<button type="submit" class="secondary" data-confirm-sale>Confirmar venda</button>');
+  }
+  if(draft){
+    const raw=draft.document;
+    $('#item-rows').innerHTML=(raw.items?.length?raw.items:[{}]).map(itemRow).join('');
+    $('#payment-rows').innerHTML=(raw.payments??[]).map(paymentRow).join('');
+    for(const [name,value] of Object.entries(raw.fields??{})){
+      if(['product','quantity','itemTotal','benefitItem','category','method','paymentAmount'].includes(name))continue;
+      const element=rows('#modal-fields [name]').find(el=>el.name===name);if(element)element.value=value;
+    }
+    $('#benefit-mode').checked=!!raw.benefitMode; $('#split-payment').checked=!!raw.splitPayment; $('#has-fee').checked=!!raw.hasFee;
+    splitInitialized=!!raw.payments?.length;
+  }
 
   function setEnabled(container, enabled) {
     container.hidden = !enabled;
@@ -57,13 +82,13 @@ export function openSaleForm(ui, saleId) {
     const driver = $('[name=driver]').value;
     const status = $('[name=deliveryStatus]');
     const old = status.value;
-    const allowed = driver === 'Depósito' ? ['pickup','collected'] : ['awaiting','out','delivered'];
+    const allowed = !driver ? ['','awaiting','out','delivered','pickup','collected'] : driver === 'Depósito' ? ['pickup','collected'] : ['awaiting','out','delivered'];
     // Não presumir entrega concluída. Só o usuário pode confirmar a conclusão.
     const selected = event?.target?.name === 'driver' ? (allowed.includes(old) ? old : allowed[0]) : old;
     if (!allowed.includes(selected)) allowed.push(selected);
     status.innerHTML = allowed.map(key => `<option value="${key}" ${key === selected ? 'selected' : ''}>${DELIVERY[key]}</option>`).join('');
     setEnabled($('#other-driver'),driver === 'Outro');
-    $('[name=driverOther]').required = driver === 'Outro';
+    $('[name=driverOther]').required = false;
   }
   function recalculate(event) {
     const benefit = $('#benefit-mode').checked;
@@ -123,7 +148,7 @@ export function openSaleForm(ui, saleId) {
     }
     try {
       const allocated = payments(items);
-      $('#payment-summary').textContent = !split ? allocated.map(p => `${CATEGORIES[p.category]}: ${currency(p.amount)} em ${METHODS[p.method]}`).join(' · ') : '';
+      $('#payment-summary').textContent = !split && !$('[name=simpleMethod]').value ? 'Pagamento a definir — pode salvar a anotação.' : !split ? allocated.map(p => `${CATEGORIES[p.category]}: ${currency(p.amount)} em ${METHODS[p.method] ?? 'A definir'}`).join(' · ') : '';
       $('#allocation-summary').textContent = presentCategories.map(category => {
         const difference = totals[category] - allocated.filter(p => p.category===category).reduce((sum,p) => sum+p.amount,0);
         return `${CATEGORIES[category]}: ${difference===0 ? 'conferido' : difference>0 ? `falta ${currency(difference)}` : `excede ${currency(-difference)}`}`;

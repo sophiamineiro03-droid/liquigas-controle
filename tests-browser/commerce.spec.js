@@ -4,14 +4,14 @@ async function open(page) {
   await page.getByRole('button', { name: 'Abrir caixa', exact: true }).click();
   await page.getByLabel('Caixa inicial — fora do fundo (R$)').fill('500,00');
   await page.getByLabel('Responsável', { exact: true }).fill('Atendente');
-  await page.locator('#submit').click();
+  await (page.locator('[data-confirm-sale]').isVisible().then(visible => visible ? page.locator('[data-confirm-sale]') : page.locator('#submit'))).then(button=>button.click());
   await expect(page.locator('dialog')).not.toBeVisible();
 }
 const state = page => page.evaluate(async () => (await import('/storage.js')).load());
 async function submit(page) {
   if (!(await page.getByLabel('Responsável', { exact: true }).isVisible())) await page.locator('#sale-registration summary').click();
   await page.getByLabel('Responsável', { exact: true }).fill('Atendente');
-  await page.locator('#submit').click();
+  await (page.locator('[data-confirm-sale]').isVisible().then(visible => visible ? page.locator('[data-confirm-sale]') : page.locator('#submit'))).then(button=>button.click());
   await expect(page.locator('dialog')).not.toBeVisible();
 }
 async function regularSale(page, method = 'cash', customer = 'Maria') {
@@ -33,6 +33,7 @@ test('venda mista, pagamentos por categoria, revisão auditável e cancelamento'
   await page.locator('.item-row').nth(1).getByLabel('Produto', { exact: true }).selectOption('water20');
   await page.locator('.item-row').nth(1).getByLabel('Quantidade', { exact: true }).fill('3');
   await page.locator('.item-row').nth(1).getByLabel('Total da linha (R$)').fill('30,00');
+  await page.getByLabel('Forma de pagamento', { exact: true }).selectOption('cash');
   await page.getByLabel('Dividir pagamento', { exact: true }).check();
   await page.locator('.payment-row').first().getByLabel('Valor (R$)').fill('100,00');
   await page.getByRole('button', { name: 'Adicionar outra forma' }).click();
@@ -212,7 +213,7 @@ test('saída sem responsável e alerta de notas pequenas preservam a contabilida
   await page.getByLabel('Descrição / motivo').fill('Pagamento de conta');
   await page.getByLabel('Observações (opcional)', { exact: true }).fill('Recibo guardado');
   await page.getByLabel('Responsável', { exact: true }).fill('');
-  await page.locator('#submit').click();
+  await (page.locator('[data-confirm-sale]').isVisible().then(visible => visible ? page.locator('[data-confirm-sale]') : page.locator('#submit'))).then(button=>button.click());
   await expect(page.locator('dialog')).not.toBeVisible();
   const r = await page.evaluate(async () => { const d = await (await import('/storage.js')).load(); return (await import('/commerce.js')).report(d, d.days[0].id); });
   expect(r.expense).toBe(5000); expect(r.physical.cash).toBe(45000); expect(r.physical.fund).toBe(10000);

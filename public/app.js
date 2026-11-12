@@ -46,7 +46,7 @@ function closingPanel(day) {
 function renderCurrent() {
   const day = state.days.find(day => !day.closing);
   if (!day) {
-    $('#current').innerHTML = `<section class="panel empty"><span class="eyebrow">PRONTO PARA COMEÇAR</span><h2>Nenhum caixa aberto</h2><p>Hoje: ${dayDate(today())}</p><p>Informe os saldos separados do caixa e do fundo de troco para iniciar o expediente. O fundo tem referência de R$ 100,00.</p><button id="open-day">Abrir caixa</button></section>`;
+    $('#current').innerHTML = `<section class="panel empty"><span class="eyebrow">PRONTO PARA COMEÇAR</span><h2>Nenhum caixa aberto</h2><p>Hoje: ${dayDate(today())}</p><p>Informe os saldos separados do caixa e do fundo de troco para iniciar o expediente. O fundo tem referência de R$ 100,00.</p><button id="open-day">Abrir caixa</button> <button data-new-sale class="secondary">Nova anotação</button></section>`;
     return;
   }
   const s = summary(day);
@@ -80,6 +80,8 @@ async function commit(transform) {
   } finally { busy = false; $('#submit').disabled = false; }
 }
 function openModal(title, fields, action, submit = 'Confirmar e salvar') {
+  document.querySelector('[data-confirm-sale]')?.remove();
+  $('#submit').removeAttribute('data-save-draft'); $('#submit').formNoValidate=false;
   $('#modal-title').textContent = title;
   $('#modal-fields').oninput = null; $('#modal-fields').onchange = null; $('#modal-fields').onclick = null;
   $('#modal-fields').innerHTML = fields;
@@ -158,7 +160,7 @@ $('#modal-form').onsubmit = async event => {
   const values = Object.fromEntries(new FormData(event.currentTarget));
   try {
     if (state.revision !== dialogRevision) throw new Error('Os dados mudaram em outra operação. Feche e reabra este formulário para conferir os saldos atuais.');
-    if (await dialogAction(values)) { responsible = values.user; $('#modal').close(); }
+    if (await dialogAction(values,{saveDraft:event.submitter?.dataset.saveDraft==='true'})) { responsible = values.user; $('#modal').close(); }
   } catch (error) { $('#modal-error').textContent = error.message; }
 };
 $('#modal-form').addEventListener('input', () => {

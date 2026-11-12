@@ -64,7 +64,7 @@ test('valida soma por categoria, quantidade, Gás do Povo, taxa, troco e respons
     fields({ items: [{ product: 'water20', quantity: 1, total: 10798 }], payments: [{ category: 'water', method: 'benefit', amount: 10798 }] }),
     fields({ items: [{ product: 'p13', quantity: 1, total: 12000 }], payments: [{ category: 'gas', method: 'benefit', amount: 12000 }] }),
     fields({ fee: { amount: 1000, method: 'cash', status: 'paid' } }),
-    fields({ tendered: 1000 }), fields({ tendered: 99999 }), fields({ customer: '' }),
+    fields({ tendered: 1000 }), fields({ tendered: 99999 }), fields({ customer: 'x'.repeat(101) }),
     fields({ payments: [{ category: 'gas', method: 'cash', amount: 0 }] }),
   ]) assert.throws(() => createSale(state, data, user));
   assert.throws(() => createSale(state, fields(), ''));

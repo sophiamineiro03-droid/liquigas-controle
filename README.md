@@ -75,7 +75,7 @@ Armazenamento local não é backup permanente. Limpeza de dados do site, perda d
 - `test/`: testes Node de regras financeiras/comerciais e servidor.
 - `tests-browser/`: testes Playwright de fluxos, migração aditiva, offline, segurança de texto, falhas e concorrência.
 
-Valores são exibidos em reais; horários no fuso `America/Sao_Paulo`. Para atualizar a interface, incremente a versão do cache em `public/sw.js`; a versão atual é `liquigas-shell-v3`. Feche abas antigas para ativar o novo shell. **Nunca limpe IndexedDB para atualizar a aplicação.**
+Valores são exibidos em reais; horários no fuso `America/Sao_Paulo`. Para atualizar a interface, incremente a versão do cache em `public/sw.js`; a versão atual é `liquigas-shell-v4`. Feche abas antigas para ativar o novo shell. **Nunca limpe IndexedDB para atualizar a aplicação.**
 
 ## Vercel
 
@@ -87,7 +87,7 @@ Preset Other, raiz do repositório e saída `public`; configurações antigas qu
 
 A proposta de Supabase está em [docs/backend/README.md](docs/backend/README.md), com cinco migrações versionadas, RLS, funções transacionais, idempotência, fechamento coordenado e testes locais de banco. Inclui rascunhos editáveis como caderno: informações incompletas não são presumidas como fiado ou recebimento; a confirmação financeira é separada.
 
-**O frontend continua local e sem Supabase.** Nenhum SQL remoto, login, credencial, importação real ou sincronização foi configurado nesta etapa. O formulário atual ainda não utiliza os rascunhos do banco; sua adaptação será posterior à revisão.
+**O frontend continua local e sem Supabase.** Nenhum SQL remoto, login, credencial, importação real ou sincronização foi configurado nesta etapa. As anotações do formulário são persistidas apenas no IndexedDB; ainda não utilizam os rascunhos do banco nem sincronizam entre dispositivos.
 
 Para testar somente um PostgreSQL descartável local, com Node 24 e Docker:
 
@@ -96,3 +96,7 @@ npm run test:db
 ```
 
 O runner cria um container sem rede/portas, aplica fixtures Auth mínimos e migrações, executa testes de integridade/RLS/concorrência e remove o container. Não aceita endereço de banco remoto. Leia os limites do teste e o procedimento de primeira administradora antes de qualquer execução futura no Supabase.
+
+### Anotações locais como caderno
+
+Em **Nova venda**, use **Salvar anotação** mesmo sem preço, pagamento, cliente ou entregador. As anotações aparecem em **Vendas e anotações** para completar e editar, inclusive após reabrir o navegador e sem caixa aberto. Somente **Confirmar venda**, com produtos e pagamentos financeiramente válidos e caixa aberto, gera venda e movimentos. Pagamento a definir nunca vira fiado automaticamente. A confirmação preserva o UUID; alterações e arquivamentos preservam eventos locais. Vendas já confirmadas continuam usando correção financeira com histórico.
