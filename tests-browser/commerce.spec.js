@@ -61,11 +61,16 @@ test('venda mista, pagamentos por categoria, revisão auditável e cancelamento'
   expect(data.business.sales[0].items[1].quantity).toBe(4);
   expect(data.business.events.at(-1).type).toBe('saleEdited');
   expect(data.days[0].movements).toHaveLength(3);
-  await page.getByRole('button', { name: 'Cancelar e estornar', exact: true }).click();
+  await page.getByRole('button', { name: 'Excluir venda', exact: true }).click();
   await page.getByLabel('Justificativa do estorno').fill('Pedido cancelado e valores devolvidos');
   await submit(page);
   data = await state(page);
   expect(data.business.sales[0].canceled).toBe(true);
+  await page.getByRole('button', { name: 'Vendas', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Excluir venda', exact: true })).toHaveCount(0);
+  await expect(page.locator('[data-excluded-sales]')).not.toHaveAttribute('open');
+  await page.locator('[data-excluded-sales] > summary').click();
+  await expect(page.locator('[data-excluded-sales]')).toContainText('Cancelada / estornada');
   expect(data.days[0].movements).toHaveLength(4);
   expect(errors).toEqual([]);
 });

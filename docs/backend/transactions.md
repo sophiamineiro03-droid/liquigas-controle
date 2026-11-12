@@ -86,3 +86,7 @@ A preparação pode ser abortada com justificativa. Dispositivo offline/inacess�
 ## Erros de integração
 
 Códigos SQLSTATE comuns: `28000` autenticação, `42501` permissão, `22023` entrada inválida, `23505` unicidade, `23514` restrição e `P0001` conflito de negócio. Mensagens `LC_*` distinguem caixa fechado, excesso de recebimento, saldo insuficiente, versão obsoleta, operação alterada e pendências. O frontend deve traduzir mensagens e manter a outbox, nunca considerar erro como sucesso.
+
+## Excluir na interface
+
+“Excluir anotação” corresponde ao comando `draft_cancel`: preserva documento, auditoria e UUID, marca `status=canceled` e retira da lista de pendentes. “Excluir venda” corresponde a `sale_cancel`: marca `sales.canceled`, cancela entrega e estorna o movimento financeiro atomicamente. Não é DELETE físico. Vendas canceladas ficam fora dos totais e da fila operacional; a interface local as mostra em histórico recolhido. O banco mantém verificações de versão, idempotência, caixa aberto e ausência de recebimentos ativos vinculados. Caixa fechado não é reescrito pela exclusão. Nenhuma alteração da primeira migração é necessária para este comportamento.

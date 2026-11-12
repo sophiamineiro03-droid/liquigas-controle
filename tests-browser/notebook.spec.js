@@ -23,12 +23,16 @@ test('salva o caso da imagem sem valor obrigatório, reabre e confirma preservan
  expect(s.business.sales[0].id).toBe(id);expect(s.business.drafts[0].status).toBe('converted');
  expect(s.business.sales[0].payments[0].method).toBe('pix');expect(s.days[0].movements[0].entries).toHaveLength(0);
 });
-test('pode anotar tudo em branco antes de abrir caixa e arquivar sem excluir',async({page})=>{
+test('pode anotar tudo em branco e excluir da lista sem perder histórico',async({page})=>{
  await page.goto('/');await page.getByRole('button',{name:'Nova anotação',exact:true}).click();
  await page.getByRole('button',{name:'Salvar anotação',exact:true}).click();
  await expect(page.locator('dialog')).not.toBeVisible();expect((await read(page)).business.drafts).toHaveLength(1);
- await page.getByRole('button',{name:'Arquivar anotação',exact:true}).click();await page.locator('#submit').click();
+ await page.getByRole('button',{name:'Excluir anotação',exact:true}).click();await page.locator('#submit').click();
  await expect(page.locator('dialog')).not.toBeVisible();expect((await read(page)).business.drafts[0].status).toBe('canceled');
+ await expect(page.getByRole('button',{name:'Completar / editar anotação'})).toHaveCount(0);
+ await expect(page.locator('[data-excluded-drafts]')).not.toHaveAttribute('open');
+ await page.locator('[data-excluded-drafts] summary').click();
+ await expect(page.locator('[data-excluded-drafts]')).toContainText('histórico preservado');
 });
 test('anotação offline preserva valor e pagamento desconhecidos',async({page,context})=>{
  await openCash(page);await expect(page.locator('#offline-ready')).toContainText('disponível offline');

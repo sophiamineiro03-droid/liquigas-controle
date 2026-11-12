@@ -75,7 +75,7 @@ Armazenamento local não é backup permanente. Limpeza de dados do site, perda d
 - `test/`: testes Node de regras financeiras/comerciais e servidor.
 - `tests-browser/`: testes Playwright de fluxos, migração aditiva, offline, segurança de texto, falhas e concorrência.
 
-Valores são exibidos em reais; horários no fuso `America/Sao_Paulo`. Para atualizar a interface, incremente a versão do cache em `public/sw.js`; a versão atual é `liquigas-shell-v4`. Feche abas antigas para ativar o novo shell. **Nunca limpe IndexedDB para atualizar a aplicação.**
+Valores são exibidos em reais; horários no fuso `America/Sao_Paulo`. Para atualizar a interface, incremente a versão do cache em `public/sw.js`; a versão atual é `liquigas-shell-v5`. Feche abas antigas para ativar o novo shell. **Nunca limpe IndexedDB para atualizar a aplicação.**
 
 ## Vercel
 
@@ -100,3 +100,5 @@ O runner cria um container sem rede/portas, aplica fixtures Auth mínimos e migr
 ### Anotações locais como caderno
 
 Em **Nova venda**, use **Salvar anotação** mesmo sem preço, pagamento, cliente ou entregador. As anotações aparecem em **Vendas e anotações** para completar e editar, inclusive após reabrir o navegador e sem caixa aberto. Somente **Confirmar venda**, com produtos e pagamentos financeiramente válidos e caixa aberto, gera venda e movimentos. Pagamento a definir nunca vira fiado automaticamente. A confirmação preserva o UUID; alterações e arquivamentos preservam eventos locais. Vendas já confirmadas continuam usando correção financeira com histórico.
+
+**Excluir:** anotações saem da lista de pendentes e ficam em um histórico recolhido. Excluir uma venda confirmada usa cancelamento com estorno, exige justificativa e mantém sua auditoria. Vendas excluídas ficam no histórico recolhido e saem da fila de entregas. Caixa fechado e recebimentos vinculados mantêm as restrições existentes.
