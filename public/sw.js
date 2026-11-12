@@ -1,5 +1,5 @@
-const CACHE = 'liquigas-shell-v2';
-const FILES = ['/', '/index.html', '/styles.css', '/app.js', '/commerce.js', '/commerce-ui.js', '/domain.js', '/storage.js', '/sync.js', '/manifest.webmanifest', '/icon.svg'];
+const CACHE = 'liquigas-shell-v3';
+const FILES = ['/', '/index.html', '/styles.css', '/app.js', '/commerce.js', '/commerce-ui.js', '/sale-form.js', '/domain.js', '/storage.js', '/sync.js', '/manifest.webmanifest', '/icon.svg'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
 });

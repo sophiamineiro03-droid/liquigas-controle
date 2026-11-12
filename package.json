@@ -11,7 +11,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/server.js && node --check public/app.js && node --check public/domain.js && node --check public/storage.js && node --check public/sync.js && node --check public/sw.js && node --check public/commerce.js && node --check public/commerce-ui.js",
+    "check": "node --check src/server.js && node --check public/app.js && node --check public/domain.js && node --check public/storage.js && node --check public/sync.js && node --check public/sw.js && node --check public/commerce.js && node --check public/commerce-ui.js && node --check public/sale-form.js",
     "test:browser": "playwright test"
   },
   "devDependencies": {

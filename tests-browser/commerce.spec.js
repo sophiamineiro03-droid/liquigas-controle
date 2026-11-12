@@ -9,6 +9,7 @@ async function open(page) {
 }
 const state = page => page.evaluate(async () => (await import('/storage.js')).load());
 async function submit(page) {
+  if (!(await page.getByLabel('Responsável', { exact: true }).isVisible())) await page.locator('#sale-registration summary').click();
   await page.getByLabel('Responsável', { exact: true }).fill('Atendente');
   await page.locator('#submit').click();
   await expect(page.locator('dialog')).not.toBeVisible();
@@ -16,9 +17,8 @@ async function submit(page) {
 async function regularSale(page, method = 'cash', customer = 'Maria') {
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
   await page.getByLabel('Nome do cliente', { exact: true }).fill(customer);
-  await page.getByLabel('Valor total destes produtos (R$)', { exact: true }).fill('120,00');
-  await page.getByLabel('Forma de pagamento dos produtos', { exact: true }).selectOption(method);
-  await page.getByLabel('Valor deste pagamento (R$)', { exact: true }).fill('120,00');
+  await page.getByLabel('Total da linha (R$)', { exact: true }).fill('120,00');
+  await page.getByLabel('Forma de pagamento', { exact: true }).selectOption(method);
   await submit(page);
 }
 
@@ -28,20 +28,22 @@ test('venda mista, pagamentos por categoria, revisão auditável e cancelamento'
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
   await page.getByLabel('Nome do cliente', { exact: true }).fill('Maria');
   await page.locator('.item-row').first().getByLabel('Quantidade', { exact: true }).fill('2');
-  await page.locator('.item-row').first().getByLabel('Valor total destes produtos (R$)').fill('240,00');
+  await page.locator('.item-row').first().getByLabel('Total da linha (R$)').fill('240,00');
   await page.getByRole('button', { name: 'Adicionar produto' }).click();
   await page.locator('.item-row').nth(1).getByLabel('Produto', { exact: true }).selectOption('water20');
   await page.locator('.item-row').nth(1).getByLabel('Quantidade', { exact: true }).fill('3');
-  await page.locator('.item-row').nth(1).getByLabel('Valor total destes produtos (R$)').fill('30,00');
-  await page.locator('.payment-row').first().getByLabel('Valor deste pagamento (R$)').fill('100,00');
-  await page.getByRole('button', { name: 'Dividir / adicionar pagamento' }).click();
-  await page.locator('.payment-row').nth(1).getByLabel('Forma de pagamento dos produtos').selectOption('pix');
-  await page.locator('.payment-row').nth(1).getByLabel('Valor deste pagamento (R$)').fill('140,00');
-  await page.getByRole('button', { name: 'Dividir / adicionar pagamento' }).click();
-  await page.locator('.payment-row').nth(2).getByLabel('Categoria do pagamento').selectOption('water');
-  await page.locator('.payment-row').nth(2).getByLabel('Forma de pagamento dos produtos').selectOption('debit');
-  await page.locator('.payment-row').nth(2).getByLabel('Valor deste pagamento (R$)').fill('30,00');
-  await page.getByLabel('Dinheiro entregue pelo cliente', { exact: false }).fill('150,00');
+  await page.locator('.item-row').nth(1).getByLabel('Total da linha (R$)').fill('30,00');
+  await page.getByLabel('Dividir pagamento', { exact: true }).check();
+  await page.locator('.payment-row').first().getByLabel('Valor (R$)').fill('100,00');
+  await page.getByRole('button', { name: 'Adicionar outra forma' }).click();
+  await page.locator('.payment-row').nth(1).getByLabel('Forma').selectOption('pix');
+  await page.locator('.payment-row').nth(1).getByLabel('Valor (R$)').fill('140,00');
+  await page.getByRole('button', { name: 'Adicionar outra forma' }).click();
+  await page.locator('.payment-row').nth(2).getByLabel('Categoria').selectOption('water');
+  await page.locator('.payment-row').nth(2).getByLabel('Forma').selectOption('debit');
+  await page.locator('.payment-row').nth(2).getByLabel('Valor (R$)').fill('30,00');
+  await page.getByLabel('Cliente entregou em dinheiro (R$)', { exact: true }).fill('150,00');
+  await page.locator('#sale-extras summary').click();
   await page.getByLabel('Observações da venda', { exact: true }).fill('Entregar após as 15h');
   await expect(page.locator('#order-change')).toContainText('50,00');
   await submit(page);
@@ -71,12 +73,12 @@ test('Gás do Povo e taxa de entrega separada, preço configurável e atualizaç
   await open(page);
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
   await page.getByLabel('Nome do cliente', { exact: true }).fill('Ana');
-  await page.getByLabel('Pagamento pelo Gás do Povo', { exact: true }).check();
-  await expect(page.getByLabel('Valor total destes produtos (R$)')).toHaveValue('107,98');
-  await page.getByLabel('Haverá entrega com taxa?', { exact: true }).check();
+  await page.getByLabel('Gás do Povo', { exact: true }).check();
+  await expect(page.getByLabel('Total da linha (R$)')).toHaveValue('107,98');
+  await page.getByLabel('Cobrar taxa de entrega', { exact: true }).check();
   await page.getByLabel('Taxa de entrega (R$)', { exact: true }).fill('10,00');
-  await page.getByLabel('Responsável pela entrega / retirada', { exact: true }).selectOption('Wagner');
-  await page.getByLabel('Situação da entrega', { exact: true }).selectOption('awaiting');
+  await page.getByLabel('Quem entrega / retirada no local', { exact: true }).selectOption('Wagner');
+  await page.getByLabel('Situação', { exact: true }).selectOption('awaiting');
   await submit(page);
   const data = await state(page);
   const report = await page.evaluate(async () => { const d = await (await import('/storage.js')).load(); return (await import('/commerce.js')).report(d, d.days[0].id); });
@@ -180,12 +182,12 @@ test('taxa pendente do benefício só vira recebida ao registrar quitação', as
   await open(page);
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
   await page.getByLabel('Nome do cliente', { exact: true }).fill('Francisca');
-  await page.getByLabel('Pagamento pelo Gás do Povo', { exact: true }).check();
-  await page.getByLabel('Haverá entrega com taxa?', { exact: true }).check();
+  await page.getByLabel('Gás do Povo', { exact: true }).check();
+  await page.getByLabel('Cobrar taxa de entrega', { exact: true }).check();
   await page.getByLabel('Taxa de entrega (R$)', { exact: true }).fill('10,00');
-  await page.getByLabel('Situação do pagamento da taxa', { exact: true }).selectOption('pending');
-  await page.getByLabel('Responsável pela entrega / retirada', { exact: true }).selectOption('Vinicius');
-  await page.getByLabel('Situação da entrega', { exact: true }).selectOption('awaiting');
+  await page.getByLabel('Situação da taxa', { exact: true }).selectOption('pending');
+  await page.getByLabel('Quem entrega / retirada no local', { exact: true }).selectOption('Vinicius');
+  await page.getByLabel('Situação', { exact: true }).selectOption('awaiting');
   await submit(page);
   await page.getByRole('button', { name: 'Receber dívida', exact: true }).click();
   await page.getByLabel('Valor efetivamente recebido (R$)').fill('10,00');
@@ -222,13 +224,11 @@ test('benefício e água são cadastrados juntos sem transformar o benefício em
   await open(page);
   await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
   await page.getByLabel('Nome do cliente', { exact: true }).fill('Cliente com gás e água');
-  await page.getByLabel('Pagamento pelo Gás do Povo', { exact: true }).check();
+  await page.getByLabel('Gás do Povo', { exact: true }).check();
   await page.getByRole('button', { name: 'Adicionar produto' }).click();
   await page.locator('.item-row').nth(1).getByLabel('Produto', { exact: true }).selectOption('water20');
-  await page.locator('.item-row').nth(1).getByLabel('Valor total destes produtos (R$)').fill('10,00');
-  await page.getByLabel('Categoria do pagamento', { exact: true }).selectOption('water');
-  await page.getByLabel('Forma de pagamento dos produtos', { exact: true }).selectOption('pix');
-  await page.getByLabel('Valor deste pagamento (R$)', { exact: true }).fill('10,00');
+  await page.locator('.item-row').nth(1).getByLabel('Total da linha (R$)').fill('10,00');
+  await page.getByLabel('Forma de pagamento', { exact: true }).selectOption('pix');
   await submit(page);
   const current = await state(page);
   expect(current.business.sales[0].items[0].benefit).toBe(true);

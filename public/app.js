@@ -24,7 +24,7 @@ function field(name, title, type = 'text', value = '', extra = '') {
   return `<label>${title}<input name="${name}" type="${type}" value="${escape(value)}" ${extra}></label>`;
 }
 const amount = (name, title, value = '') => field(name, title, 'text', value, 'inputmode="decimal" autocomplete="off" required maxlength="13" placeholder="0,00"');
-const userField = (optional = false) => field('user', 'Responsável', 'text', responsible, `${optional ? '' : 'required'} maxlength="100" autocomplete="name"`) + (optional ? '<small class="muted">Responsável opcional para saídas.</small>' : '');
+const userField = (optional = false) => field('user', 'Responsável', 'text', responsible || state?.days.find(day => !day.closing)?.user || '', `${optional ? '' : 'required'} maxlength="100" autocomplete="name"`) + (optional ? '<small class="muted">Responsável opcional para saídas.</small>' : '');
 const notes = (title = 'Observações (opcional)') => `<label>${title}<textarea name="notes" maxlength="500" rows="2"></textarea></label>`;
 const description = () => '<label>Descrição / motivo<textarea name="description" required maxlength="500" rows="2"></textarea></label>';
 const selectAccount = (name, title) => `<label>${title}<select name="${name}"><option value="cash">Caixa (fora do fundo)</option><option value="fund">Fundo de troco</option></select></label>`;

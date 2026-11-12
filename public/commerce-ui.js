@@ -1,5 +1,6 @@
+import { openSaleForm } from './sale-form.js';
 import { money } from './domain.js';
-import { PRODUCTS, METHODS, CATEGORIES, DELIVERY, DRIVERS, prepareState, report, balancesDue, createSale, editSale, updateSale, cancelSale, addReceipt, reverseReceipt, configureBenefit, recordSmallNotes } from './commerce.js';
+import { PRODUCTS, METHODS, CATEGORIES, DELIVERY, DRIVERS, prepareState, report, balancesDue, updateSale, cancelSale, addReceipt, reverseReceipt, configureBenefit, recordSmallNotes } from './commerce.js';
 
 let ui;
 const $ = selector => document.querySelector(selector);
@@ -66,88 +67,7 @@ function deliveryFields(sale) {
   const value = sale?.delivery ?? { driver: 'Depósito', driverOther: '', status: 'pickup' };
   return '<h3>Entrega / retirada</h3><div class="grid-two">' + select('driver', 'Responsável pela entrega / retirada', Object.fromEntries(DRIVERS.map(x => [x,x])), value.driver) + select('deliveryStatus', 'Situação da entrega', Object.fromEntries(Object.entries(DELIVERY).filter(([key]) => key !== 'canceled')), value.status) + '</div>' + ui.field('driverOther', 'Nome de outro entregador (se selecionado Outro)', 'text', value.driverOther, 'maxlength="100"');
 }
-function itemRow(item = { product: 'p13', quantity: 1, total: '' }) {
-  return `<div class="item-row">${select('product', 'Produto', Object.fromEntries(Object.entries(PRODUCTS).map(([k,p]) => [k,p.name])), item.product)}${ui.field('quantity', 'Quantidade', 'number', item.quantity, 'required min="1" max="99999" step="1"')}${ui.amount('itemTotal', 'Valor total destes produtos (R$)', typeof item.total === 'number' ? inputMoney(item.total) : '')}<label class="check item-benefit"><input type="checkbox" name="benefitItem" ${item.benefit ? 'checked' : ''}> P13 pelo benefício</label><button type="button" class="secondary remove-row">Remover produto</button></div>`;
-}
-function paymentRow(payment = { category: 'gas', method: 'cash', amount: '' }) {
-  return `<div class="payment-row">${select('category', 'Categoria do pagamento', CATEGORIES, payment.category)}${select('method', 'Forma de pagamento dos produtos', Object.fromEntries(Object.entries(METHODS).filter(([key]) => key !== 'benefit')), payment.method)}${ui.amount('paymentAmount', 'Valor deste pagamento (R$)', typeof payment.amount === 'number' ? inputMoney(payment.amount) : '')}<button type="button" class="secondary remove-row">Remover pagamento</button></div>`;
-}
-function parseItems() {
-  return [...document.querySelectorAll('.item-row')].map(row => ({ product: row.querySelector('[name=product]').value, quantity: Number(row.querySelector('[name=quantity]').value), total: money(row.querySelector('[name=itemTotal]').value), benefit: $('#benefit-mode').checked && row.querySelector('[name=benefitItem]').checked }));
-}
-function parseSale(values, old) {
-  const items = parseItems();
-  const benefit = $('#benefit-mode').checked;
-  const benefitTotal = items.filter(i => i.benefit).reduce((sum,i) => sum+i.total,0);
-  if (benefit && !benefitTotal) throw new Error('Marque pelo menos um P13 pago pelo Gás do Povo, ou desmarque a opção do benefício.');
-  const payments = items.some(i => !i.benefit) ? [...document.querySelectorAll('.payment-row')].map(row => ({ category: row.querySelector('[name=category]').value, method: row.querySelector('[name=method]').value, amount: money(row.querySelector('[name=paymentAmount]').value) })) : [];
-  if (benefitTotal) payments.push({ category: 'gas', method: 'benefit', amount: benefitTotal });
-  const fee = $('#has-fee').checked ? { amount: money(values.feeAmount), method: values.feeMethod, status: values.feeStatus } : null;
-  return { customer: values.customer, items, payments, fee, benefitPrice: old?.benefitPrice ?? state().business.benefitPrice, tendered: values.tendered ? money(values.tendered) : undefined, changeFrom: values.changeFrom,
-    delivery: { driver: values.driver, driverOther: values.driverOther, status: values.deliveryStatus }, notes: values.notes,
-    address: Object.fromEntries(['district','street','number','extra','reference'].map(key => [key, values[key]])), posted: values.posted === 'yes' };
-}
-function saleForm(saleId) {
-  if (!active()) throw new Error('Abra um caixa para cadastrar uma venda.');
-  const sale = state().business.sales.find(s => s.id === saleId);
-  const price = sale?.benefitPrice ?? state().business.benefitPrice;
-  const isBenefit = sale?.payments.some(p => p.method === 'benefit');
-  const fields = ui.field('customer', 'Nome do cliente', 'text', sale?.customer ?? '', 'required maxlength="100"') +
-    `<label class="check"><input id="benefit-mode" type="checkbox" ${isBenefit ? 'checked' : ''}> Pagamento pelo Gás do Povo</label><p class="muted">Benefício: ${currency(price)} por P13. Marque os P13 pelo benefício em cada linha. O valor deles é automático; outros produtos e pagamentos podem ficar na mesma venda.</p><h3>Produtos</h3><div id="item-rows">${(sale?.items ?? [{}]).map(i => itemRow(i.product ? { ...i, benefit: i.benefit ?? (isBenefit && i.product === 'p13') } : undefined)).join('')}</div><button type="button" id="add-item" class="secondary">Adicionar produto</button><p id="sale-totals" class="help" aria-live="polite"></p><div id="normal-payments"><h3>Pagamentos dos produtos</h3><p class="muted">Discrimine o valor de cada categoria. Inclua a parte fiada para completar o total. A taxa de entrega fica no campo próprio.</p><div id="payment-rows">${(sale?.payments.filter(p => p.method !== 'benefit')?.length ? sale.payments.filter(p => p.method !== 'benefit') : [{}]).map(p => paymentRow(p.method ? p : undefined)).join('')}</div><button type="button" id="add-payment" class="secondary">Dividir / adicionar pagamento</button></div>` +
-    `<div id="benefit-fee"><label class="check"><input type="checkbox" id="has-fee" ${sale?.fee ? 'checked' : ''}> Haverá entrega com taxa?</label><div id="fee-fields">${ui.amount('feeAmount', 'Taxa de entrega (R$)', sale?.fee ? inputMoney(sale.fee.amount) : '')}<div class="grid-two">${select('feeMethod', 'Forma de pagamento da taxa', Object.fromEntries(Object.entries(METHODS).filter(([key]) => key !== 'benefit')), sale?.fee?.method ?? 'cash')}${select('feeStatus', 'Situação do pagamento da taxa', { paid: 'Paga', pending: 'Pendente / não recebida' }, sale?.fee?.status ?? 'paid')}</div></div></div>` +
-    ui.field('tendered', 'Dinheiro entregue pelo cliente (opcional; vazio = valor exato)', 'text', sale?.tendered ? inputMoney(sale.tendered) : '', 'inputmode="decimal" maxlength="13"') + select('changeFrom', 'De onde saiu o troco?', { fund: 'Fundo de troco', cash: 'Caixa das vendas' }, sale?.changeFrom ?? 'fund') + '<p id="order-change" class="help" aria-live="polite"></p>' + deliveryFields(sale) +
-    `<details><summary>Endereço (opcional)</summary>${[['district','Bairro'],['street','Rua'],['number','Número'],['extra','Complemento'],['reference','Referência']].map(([key,label]) => ui.field(key,label,'text',sale?.address[key] ?? '', 'maxlength="200"')).join('')}</details>` +
-    `<label>Observações da venda<textarea name="notes" maxlength="500" rows="2">${esc(sale?.notes ?? '')}</textarea></label>` + select('posted', 'Lançamento no RevGás', { no: 'Ainda não lançada', yes: 'Já lançada' }, sale?.posted ? 'yes' : 'no') +
-    (sale ? ui.field('reason', 'Justificativa da correção', 'text', '', 'required maxlength="500"') : '') + ui.userField();
-  ui.openModal(sale ? 'Corrigir venda' : 'Nova venda', fields, async values => ui.commit(next => {
-    const input = parseSale(values, sale);
-    return sale ? editSale(next, sale.id, input, values.reason, values.user) : createSale(next, input, values.user);
-  }));
-  function recalculate(event) {
-    const benefit = $('#benefit-mode').checked;
-    for (const row of document.querySelectorAll('.item-row')) {
-      const product = row.querySelector('[name=product]').value;
-      const flag = row.querySelector('[name=benefitItem]');
-      row.querySelector('.item-benefit').hidden = !benefit || product !== 'p13';
-      if (!benefit || product !== 'p13') flag.checked = false;
-      else if (event?.target?.id === 'benefit-mode' || event?.target === row.querySelector('[name=product]')) flag.checked = true;
-    }
-    const normal = [...document.querySelectorAll('.item-row')].some(row => !row.querySelector('[name=benefitItem]').checked);
-    $('#normal-payments').hidden = !normal;
-    $('#normal-payments').querySelectorAll('input,select').forEach(input => { input.disabled = !normal; });
-    $('#benefit-fee').hidden = !benefit;
-    const hasFee = benefit && $('#has-fee').checked;
-    $('#fee-fields').hidden = !hasFee;
-    $('#fee-fields').querySelectorAll('input,select').forEach(input => { input.disabled = !hasFee; });
-    if (!benefit) $('#has-fee').checked = false;
-    document.querySelectorAll('.item-row').forEach(row => {
-      const flag = row.querySelector('[name=benefitItem]').checked;
-      if (flag) {
-        const amount = Number(row.querySelector('[name=quantity]').value) * price;
-        row.querySelector('[name=itemTotal]').value = Number.isSafeInteger(amount) && amount >= 0 ? inputMoney(amount) : '';
-      }
-      row.querySelector('[name=itemTotal]').readOnly = flag;
-    });
-    try {
-      const items = parseItems();
-      const gas = items.filter(i => PRODUCTS[i.product].category === 'gas').reduce((s,i) => s+i.total,0);
-      const water = items.filter(i => PRODUCTS[i.product].category === 'water').reduce((s,i) => s+i.total,0);
-      $('#sale-totals').textContent = `Produtos: gás ${currency(gas)} · água ${currency(water)} · total ${currency(gas+water)}.`;
-      let cash = 0;
-      if (normal) document.querySelectorAll('.payment-row').forEach(row => { if (row.querySelector('[name=method]').value === 'cash') cash += money(row.querySelector('[name=paymentAmount]').value); });
-      if (hasFee && $('[name=feeStatus]').value === 'paid' && $('[name=feeMethod]').value === 'cash') cash += money($('[name=feeAmount]').value);
-      const tendered = $('[name=tendered]').value ? money($('[name=tendered]').value) : cash;
-      $('#order-change').textContent = !cash && tendered ? 'Não há parcela em dinheiro. Limpe o campo de dinheiro entregue.' : `Parcela em dinheiro: ${currency(cash)} · Troco: ${currency(tendered-cash)}. Recebimento e troco serão gravados juntos.`;
-    } catch { $('#sale-totals').textContent = 'Preencha os valores dos produtos e os pagamentos para conferir.'; $('#order-change').textContent = 'O troco é calculado sobre a parcela paga em dinheiro, incluindo taxa paga em espécie.'; }
-  }
-  $('#add-item').onclick = () => { if ($$('.item-row') >= 30) return; $('#item-rows').insertAdjacentHTML('beforeend', itemRow()); $('#item-rows').lastElementChild.querySelector('[name=benefitItem]').checked = $('#benefit-mode').checked; recalculate(); };
-  $('#add-payment').onclick = () => { if ($$('.payment-row') >= 30) return; $('#payment-rows').insertAdjacentHTML('beforeend', paymentRow()); recalculate(); };
-  const form = $('#modal-fields');
-  form.onclick = event => { if (event.target.classList.contains('remove-row')) { event.target.closest('.item-row,.payment-row').remove(); recalculate(); } };
-  form.oninput = form.onchange = recalculate;
-  recalculate();
-}
-const $$ = selector => document.querySelectorAll(selector).length;
+function saleForm(saleId) { openSaleForm({ ...ui, state, active, esc, currency, inputMoney, select }, saleId); }
 function receiptForm(saleId = '') {
   if (!active()) throw new Error('Abra um caixa para registrar recebimentos.');
   const sales = state().business.sales.filter(s => !s.canceled && Object.values(balancesDue(state(), s)).some(amount => amount > 0));
