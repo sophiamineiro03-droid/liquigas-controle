@@ -85,7 +85,7 @@ test('offline: recarrega, registra, mantém pendência e preserva após reconect
   expect((await localState(page)).days[0].movements).toHaveLength(1);
   await context.setOffline(false);
   await expect(page.locator('#connection')).toContainText('Conexão detectada');
-  await expect(page.locator('#sync')).toContainText('serviço remoto não configurado');
+  await expect(page.locator('#sync')).toContainText('envio automático ainda não ativado');
   const state = await localState(page);
   expect(state.days[0].movements).toHaveLength(1);
   expect(state.days[0].movements[0].syncStatus).toBe('pending');

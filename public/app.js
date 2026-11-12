@@ -3,6 +3,7 @@ import { setupCommerce, dashboard, dailyDetails, renderCommerce, financialReport
 import { money, summary, openDay, addMovement, reverseMovement, closeDay, TYPES, ACCOUNTS } from './domain.js';
 import { load, save } from './storage.js';
 import { syncStatus } from './sync.js';
+import { setupSyncUI } from './sync-ui.js';
 
 const $ = selector => document.querySelector(selector);
 const brl = value => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
@@ -10,7 +11,7 @@ const dayDate = value => value.split('-').reverse().join('/');
 const time = value => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-let state, selectedHistory, busy = false;
+let state, selectedHistory, busy = false, syncUI;
 let responsible = '';
 let dialogAction, dialogRevision;
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('liquigas-ledger') : null;
@@ -32,7 +33,7 @@ function metric(label, value, tone = '') { return `<div class="metric"><span>${l
 function movementTable(day, editable = false) {
   if (!day.movements.length) return '<p class="muted">Nenhuma movimentação registrada neste caixa.</p>';
   const reversed = new Set(day.movements.filter(m => m.reverses).map(m => m.reverses));
-  return `<div class="table-wrap"><table><thead><tr><th>Horário / responsável</th><th>Movimentação</th><th>Caminho do dinheiro</th><th>Histórico</th></tr></thead><tbody>${[...day.movements].reverse().map(m => `<tr><td>${time(m.createdAt)}<small>${escape(m.user)}</small></td><td><strong>${TYPES[m.type]}</strong><small>${escape(m.description)}</small><small>${escape(m.notes ?? '')}</small><small>${m.type === 'sale' ? `Venda líquida: ${brl(m.saleAmount)}` : ''}</small><small>Local · envio pendente</small></td><td>${m.entries.map(leg => `<div>${ACCOUNTS[leg.from]} → ${ACCOUNTS[leg.to]}<br><strong class="amount">${brl(leg.amount)}</strong>${leg.kind === 'saleChange' ? '<small>Troco entregue ao cliente</small>' : ''}</div>`).join('')}</td><td>${m.reverses ? `<small>Estorno de ${escape(m.reverses)}</small>` : reversed.has(m.id) ? '<span class="badge closed">Estornado</span>' : editable && !m.commerceId ? `<button class="secondary" data-reverse="${m.id}">Estornar</button>` : 'Registrado'}<small>ID: ${escape(m.id)}</small></td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Horário / responsável</th><th>Movimentação</th><th>Caminho do dinheiro</th><th>Histórico</th></tr></thead><tbody>${[...day.movements].reverse().map(m => `<tr><td>${time(m.createdAt)}<small>${escape(m.user)}</small></td><td><strong>${TYPES[m.type]}</strong><small>${escape(m.description)}</small><small>${escape(m.notes ?? '')}</small><small>${m.type === 'sale' ? `Venda líquida: ${brl(m.saleAmount)}` : ''}</small><small>${m.syncStatus === 'confirmed' ? 'Confirmado no servidor' : 'Local · aguardando confirmação'}</small></td><td>${m.entries.map(leg => `<div>${ACCOUNTS[leg.from]} → ${ACCOUNTS[leg.to]}<br><strong class="amount">${brl(leg.amount)}</strong>${leg.kind === 'saleChange' ? '<small>Troco entregue ao cliente</small>' : ''}</div>`).join('')}</td><td>${m.reverses ? `<small>Estorno de ${escape(m.reverses)}</small>` : reversed.has(m.id) ? '<span class="badge closed">Estornado</span>' : editable && !m.commerceId ? `<button class="secondary" data-reverse="${m.id}">Estornar</button>` : 'Registrado'}<small>ID: ${escape(m.id)}</small></td></tr>`).join('')}</tbody></table></div>`;
 }
 function fundPanel(day) {
   const s = summary(day);
@@ -62,7 +63,8 @@ function renderHistory() {
 function render() {
   renderCurrent(); renderHistory(); renderCommerce(state);
   const sync = syncStatus(state.days, state.business.events.length);
-  $('#sync').textContent = `${sync.pending} registros locais pendentes de envio · serviço remoto não configurado`;
+  $('#sync').textContent = state.remote?.enabled ? `${state.remote.queue.length} operações pendentes · ${state.remote.lastSyncedAt ? 'última atualização '+time(state.remote.lastSyncedAt) : 'aguardando primeira confirmação'}` : `${sync.pending} registros locais · envio automático ainda não ativado`;
+  syncUI?.render(state);
 }
 async function commit(transform) {
   if (busy) return false;
@@ -73,6 +75,7 @@ async function commit(transform) {
     channel?.postMessage('changed');
     $('#message').hidden = true;
     render();
+    if(state.remote?.enabled) void syncUI?.engine.sync();
     return true;
   } catch (error) {
     try { state = await load(); render(); } catch { /* Preservar a causa inicial. */ }
@@ -121,6 +124,12 @@ function closing() {
   const day = state.days.find(day => !day.closing);
   const expected = summary(day);
   openModal('Conferir e fechar caixa', `<p class="help">Esperado fora do fundo: <strong>${brl(expected.cash)}</strong>. Fundo esperado: <strong>${brl(expected.fund)}</strong>. Conte as duas partes separadamente. Após a confirmação, este caixa não aceitará novos lançamentos.</p>` + amount('countedCash', 'Caixa contado — fora do fundo (R$)') + amount('countedFund', 'Fundo de troco contado (R$)') + '<div id="closing-preview" class="help" aria-live="polite">Informe os valores contados para comparar.</div>' + userField() + notes('Observações (obrigatórias se houver diferença)'), async values => {
+    if(state.remote?.enabled) {
+      // Validar contagens/diferenças localmente, mas só o servidor fecha.
+      closeDay(day,{...values,countedCash:money(values.countedCash),countedFund:money(values.countedFund)});
+      await syncUI.engine.requestClose(day.id,{countedCash:money(values.countedCash),countedFund:money(values.countedFund),notes:values.notes});
+      return true;
+    }
     const ok = await commit(next => {
       const current = activeDay(next);
       if (current.id !== day.id) throw new Error('O expediente mudou. Confira a tela.');
@@ -210,7 +219,9 @@ if (channel) channel.onmessage = async () => {
 };
 setupCommerce({ getState: () => state, commit, openModal, userField, field, amount, notes, escape, brl, time, showTab, showError });
 try {
-  state = await load(); render();
+  state = await load();
+  syncUI=setupSyncUI({changed:next=>{state=next;render();channel?.postMessage('changed');},onError:showError});
+  render();
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
 } catch (error) { showError(new Error(`Não foi possível acessar o armazenamento local. Nenhuma operação foi salva. ${error.message}`)); }
 if ('serviceWorker' in navigator) {

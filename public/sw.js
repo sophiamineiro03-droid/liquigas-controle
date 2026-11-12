@@ -1,5 +1,5 @@
-const CACHE = 'liquigas-shell-v6';
-const FILES = ['/', '/index.html', '/styles.css', '/app.js', '/commerce.js', '/commerce-ui.js', '/sale-form.js', '/notebook.js', '/domain.js', '/storage.js', '/sync.js', '/manifest.webmanifest', '/icon.svg'];
+const CACHE = 'liquigas-shell-v7';
+const FILES = ['/sync-commands.js','/sync-engine.js','/sync-projection.js','/sync-ui.js','/supabase-client.js','/supabase-config.js','/vendor/supabase.js','/', '/index.html', '/styles.css', '/app.js', '/commerce.js', '/commerce-ui.js', '/sale-form.js', '/notebook.js', '/domain.js', '/storage.js', '/sync.js', '/manifest.webmanifest', '/icon.svg'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
 });

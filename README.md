@@ -11,7 +11,7 @@ npm ci --cache /tmp/liquigas-npm-cache
 npm run dev
 ```
 
-Abra `http://127.0.0.1:3000` no navegador **da mesma máquina que executa o servidor**. Se o servidor está no ambiente da nuvem, esse endereço não abre no Windows do usuário. Para executar no Windows, baixe/clone os arquivos e execute `npm start` na pasta do projeto, com Node.js 24 instalado. Nenhuma dependência é necessária para a execução normal; Playwright é dependência apenas de testes.
+Abra `http://127.0.0.1:3000` no navegador **da mesma máquina que executa o servidor**. Se o servidor está no ambiente da nuvem, esse endereço não abre no Windows do usuário. Para executar no Windows, baixe/clone os arquivos e execute `npm start` na pasta do projeto, com Node.js 24 instalado. Execute `npm ci` antes de iniciar: o SDK do Supabase é empacotado localmente. Playwright continua sendo dependência de testes.
 
 `npm start` executa sem recarga automática; `PORT=3001 npm start` muda a porta em Bash. O servidor escuta somente em loopback. O layout móvel é testado em Chromium com viewport de 390 × 844; um celular real precisa de acesso HTTPS apropriado, não do loopback de outra máquina.
 
@@ -21,7 +21,7 @@ npm test
 npm run test:browser
 ```
 
-O teste de navegador inicia seu próprio servidor na porta 3100. Usa Chromium em `/usr/bin/chromium`, ou outro executável definido em `CHROMIUM_PATH`. A hospedagem estática pode ser validada em Bash com `STATIC_PREVIEW=1 npm run test:browser` (usa Python 3 para servir temporariamente `public`). Não há compilação ou backend remoto.
+O teste de navegador inicia seu próprio servidor na porta 3100. Usa Chromium em `/usr/bin/chromium`, ou outro executável definido em `CHROMIUM_PATH`. A hospedagem estática pode ser validada em Bash com `STATIC_PREVIEW=1 npm run test:browser` (usa Python 3 para servir temporariamente `public`). O bundle do SDK é gerado por `npm run build:client`; execute esse comando antes do preview estático. O modo remoto depende de ativação da conta.
 
 ## Rotina diária
 
@@ -55,7 +55,7 @@ O IndexedDB existente (`liquigas-controle`, versão 1) e os expedientes/moviment
 
 IndexedDB guarda os registros financeiros e o service worker guarda **só os arquivos da interface**. Após a primeira carga e a indicação de prontidão, é possível recarregar e lançar sem rede. PWA/service worker requerem contexto seguro (HTTPS ou localhost). A instalação como aplicativo depende do navegador; não foi validada em todos os celulares.
 
-**Sem Supabase, banco remoto, autenticação externa ou sincronização.** Todos os registros seguem locais/pendentes; reconectar não finge envio. “Lançada no RevGás” é confirmação manual, não integração. Nome do responsável é autodeclarado, não login autenticado. O formulário reaproveita o último nome informado ou o nome de quem abriu o expediente, exibindo Registro por; ele pode ser corrigido em Atendente e RevGás. Observações/endereço também ficam em seção expansível, sem serem exigidos na venda comum. Use dispositivo/perfil restrito à equipe.
+**Antes de ativar a conta, o modo é local.** Depois da ativação, a fila envia automaticamente ao Supabase e só marca confirmação após resposta do servidor. “Lançada no RevGás” é confirmação manual, não integração. O nome digitado no formulário é uma anotação; no modo compartilhado o ator financeiro é determinado pela conta Auth. O formulário reaproveita o último nome informado ou o nome de quem abriu o expediente, exibindo Registro por; ele pode ser corrigido em Atendente e RevGás. Observações/endereço também ficam em seção expansível, sem serem exigidos na venda comum. Use dispositivo/perfil restrito à equipe.
 
 Cada operação persiste dados comerciais e movimentos financeiros em uma única transação IndexedDB. Revisão monotônica e BroadcastChannel protegem contra sobrescrita entre abas; formulários anteriores a outra alteração precisam ser reabertos. Erros de gravação não fecham o formulário nem indicam sucesso.
 
@@ -87,7 +87,7 @@ Preset Other, raiz do repositório e saída `public`; configurações antigas qu
 
 A proposta de Supabase está em [docs/backend/README.md](docs/backend/README.md), com cinco migrações versionadas, RLS, funções transacionais, idempotência, fechamento coordenado e testes locais de banco. Inclui rascunhos editáveis como caderno: informações incompletas não são presumidas como fiado ou recebimento; a confirmação financeira é separada.
 
-**O frontend continua local e sem Supabase.** Nenhum SQL remoto, login, credencial, importação real ou sincronização foi configurado nesta etapa. As anotações do formulário são persistidas apenas no IndexedDB; ainda não utilizam os rascunhos do banco nem sincronizam entre dispositivos.
+**Integração opcional implementada:** ative Minha conta e sincronização para usar Auth, rascunhos remotos e fila automática. Sem ativação, os registros continuam apenas no IndexedDB. A importação dos registros existentes exige conferência e tem os limites descritos em automatic-sync.md; nenhuma importação real é executada pela instalação do código.
 
 Para testar somente um PostgreSQL descartável local, com Node 24 e Docker:
 
@@ -111,3 +111,12 @@ Em uma venda confirmada, o botão **Atualizar entrega / observações / RevGás*
 A fronteira de entrega em `public/sync.js` prepara a conversão de `driver/status` vazios para `NULL` no servidor e a conversão inversa para a interface, preservando campos omitidos em atualizações parciais. Ainda não há transporte remoto: esses adaptadores deverão ser usados pela futura integração. O IndexedDB existente não é apagado nem regravado em massa.
 
 Esta correção altera somente o código local da aplicação. Os cinco SQLs existentes e o banco hospedado não foram modificados. Antes de habilitar sincronização, a restrição de taxa versus Depósito também deve ser aplicada ao comando SQL `sale_update` em uma nova migração revisada; a validação atual de cadastro/correção financeira já existe no SQL.
+
+
+## Integração automática com Supabase
+
+A integração está descrita em [docs/backend/automatic-sync.md](docs/backend/automatic-sync.md). O painel **Minha conta e sincronização** permite entrar na conta administrativa e ativar o aparelho. A gravação continua offline, com fila persistente e envio idempotente ao reconectar. A ativação depende de conta Auth confirmada e associação administrativa; não há signup público no site. Os avisos de modo local continuam aparecendo até a ativação.
+
+Antes da primeira conexão, exporte os dados. A importação automática é limitada a registros simples de caixa aberto; históricos fechados/corrigidos ou estornados precisam de importação assistida. O segundo aparelho conecta ao estado central sem reenviar a cópia antiga. O arquivo original é preservado localmente e incluído na exportação.
+
+Instalação: `npm ci`. O bundle do SDK é gerado por `npm run build:client` (ou automaticamente em `npm start`). Na Vercel, a instalação e o build são definidos em `vercel.json`. Nenhuma chave administrativa é publicada.
