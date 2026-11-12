@@ -102,3 +102,12 @@ O runner cria um container sem rede/portas, aplica fixtures Auth mínimos e migr
 Em **Nova venda**, use **Salvar anotação** mesmo sem preço, pagamento, cliente ou entregador. As anotações aparecem em **Vendas e anotações** para completar e editar, inclusive após reabrir o navegador e sem caixa aberto. Somente **Confirmar venda**, com produtos e pagamentos financeiramente válidos e caixa aberto, gera venda e movimentos. Pagamento a definir nunca vira fiado automaticamente. A confirmação preserva o UUID; alterações e arquivamentos preservam eventos locais. Vendas já confirmadas continuam usando correção financeira com histórico.
 
 **Excluir:** anotações saem da lista de pendentes e ficam em um histórico recolhido. Excluir uma venda confirmada usa cancelamento com estorno, exige justificativa e mantém sua auditoria. Vendas excluídas ficam no histórico recolhido e saem da fila de entregas. Caixa fechado e recebimentos vinculados mantêm as restrições existentes.
+
+
+### Completar dados sem alterar valores
+
+Em uma venda confirmada, o botão **Atualizar entrega / observações / RevGás** também permite completar ou corrigir cliente e endereço, inclusive após fechar o caixa. A alteração exige motivo, preserva o UUID, os valores, movimentos e a fotografia do fechamento e registra antes/depois na auditoria. Uma venda com taxa de entrega não pode ser alterada para retirada no Depósito por esse fluxo.
+
+A fronteira de entrega em `public/sync.js` prepara a conversão de `driver/status` vazios para `NULL` no servidor e a conversão inversa para a interface, preservando campos omitidos em atualizações parciais. Ainda não há transporte remoto: esses adaptadores deverão ser usados pela futura integração. O IndexedDB existente não é apagado nem regravado em massa.
+
+Esta correção altera somente o código local da aplicação. Os cinco SQLs existentes e o banco hospedado não foram modificados. Antes de habilitar sincronização, a restrição de taxa versus Depósito também deve ser aplicada ao comando SQL `sale_update` em uma nova migração revisada; a validação atual de cadastro/correção financeira já existe no SQL.
