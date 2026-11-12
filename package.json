@@ -2,7 +2,7 @@
   "name": "liquigas-controle",
   "version": "0.1.0",
   "private": true,
-  "description": "Base local para o sistema de controle de uma distribuidora de g\u00e1s",
+  "description": "Base local para o sistema de controle de uma distribuidora de gás",
   "type": "module",
   "engines": {
     "node": ">=24 <25"
@@ -11,7 +11,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/server.js && node --check public/app.js && node --check public/domain.js && node --check public/storage.js && node --check public/sync.js && node --check public/sw.js",
+    "check": "node --check src/server.js && node --check public/app.js && node --check public/domain.js && node --check public/storage.js && node --check public/sync.js && node --check public/sw.js && node --check public/commerce.js && node --check public/commerce-ui.js",
     "test:browser": "playwright test"
   },
   "devDependencies": {

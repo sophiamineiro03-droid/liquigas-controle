@@ -1,3 +1,4 @@
+import { prepareState } from './commerce.js';
 const DB_NAME = 'liquigas-controle';
 const STORE = 'state';
 let connection;
@@ -18,7 +19,7 @@ export async function load() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly');
     const request = tx.objectStore(STORE).get('ledger');
-    request.onsuccess = () => resolve(request.result ?? { version: 1, revision: 0, days: [] });
+    request.onsuccess = () => resolve(prepareState(request.result ?? { version: 1, revision: 0, days: [] }));
     request.onerror = () => reject(request.error);
   });
 }

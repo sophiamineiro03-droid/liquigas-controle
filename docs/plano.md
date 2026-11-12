@@ -1,17 +1,31 @@
-# Escopo e evolução
+# Escopo da evolução operacional
 
-## Entregue nesta primeira versão
+## Implementado sobre a base existente
 
-Caixa diário local, fundo de referência de R$ 100,00 separado do caixa, vendas e troco atômicos, entradas/saídas, transferências internas, reposição, ajustes justificados, estornos rastreáveis, conferência, fechamento imutável na interface, histórico por data, impressão, exportação JSON e persistência offline em IndexedDB.
+- Vendas de gás (P13/P08/P45) e água (galão 20 L/fardo 510 ml), múltiplos produtos, quantidades e pagamentos divididos por categoria.
+- Gás do Povo como pagamento, preço padrão configurável de R$ 107,98/P13, benefício fora da gaveta e taxa de entrega paga/pendente separada.
+- Entregas/retiradas com filtros, observações e confirmação manual de lançamento no RevGás.
+- Recebimentos parciais vinculados e recebimentos antigos sem vínculo, sem inventar saldo anterior.
+- Painel e fechamento financeiro por categoria e meio, sem duplicar taxas, dívidas ou transferências.
+- Caixa e fundo fixo de R$ 100 preservados; indicador de falta de notas/moedas independente do saldo.
+- Correções, cancelamentos e estornos com registros anteriores e posteriores; proteção de caixas fechados.
+- Histórico legado, persistência IndexedDB, offline e exportação JSON preservados.
 
-## Próxima evolução, sujeita à definição e autorização
+## Decisões confirmadas pela usuária
 
-- Autenticação e permissões reais. O responsável atual é um nome autodeclarado.
-- Importação de cópias com validação integral e política explícita de mesclagem; exportação já disponível.
-- Integração Supabase somente após autorização: autenticação, migrações, políticas de acesso, validação das regras no backend e proteção de credenciais.
-- Sincronização real: cada comando terá UUID como chave idempotente, outbox persistida e confirmação do backend. Conflitos de abertura/fechamento não poderão ser mesclados silenciosamente; expedientes fechados devem rejeitar novos comandos. Estado pendente somente muda após confirmação do servidor.
-- Reabertura e correções posteriores ao fechamento exigem política auditável; nesta versão são bloqueadas.
-- Testes em dispositivos móveis reais e de instalação PWA, além dos testes responsivos de Chromium.
-- Estratégia de backup permanente, restauração e recuperação de dispositivo antes do uso como único registro financeiro.
+Caixa inicial exclui o fundo. Vendas mistas têm valor por produto e pagamentos explicitamente atribuídos a gás/água. Recebimentos antigos sem venda cadastrada registram somente o valor recebido, com saldo anterior desconhecido.
 
-Não implementar estoque, clientes, pedidos ou emissão fiscal nesta fase. Não publicar a aplicação ou configurar serviços externos sem autorização.
+## Limites desta etapa
+
+Não configurar Supabase, banco remoto, autenticação externa, sincronização ou integração automática com RevGás. Não há estoque, emissão fiscal, reembolso por operadora nem cadastro independente de clientes. O anexo recebido termina no meio da seção 11; requisitos posteriores não foram recebidos nem presumidos.
+
+## Próximas evoluções
+
+- Complementos do requisito da seção 11 em diante, quando fornecidos.
+- Importação validada e recuperação de cópias; backup permanente.
+- Autenticação, permissões e validação no servidor, somente após autorização de integração.
+- Sincronização idempotente e tratamento explícito de conflitos, sem substituir UUIDs ou sobrescrever fechamentos.
+- Política de correções em caixas fechados e de estornos com recebimentos de expedientes já encerrados.
+- Testes em celulares físicos e de instalação PWA.
+
+As integrações ficam para etapa futura. Um push em main aciona a Vercel já conectada; publicação deve respeitar a autorização aplicável.

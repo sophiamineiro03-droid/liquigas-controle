@@ -2,6 +2,7 @@ export const TYPES = {
   income: 'Entrada de dinheiro', expense: 'Saída de dinheiro', sale: 'Venda em espécie',
   transfer: 'Transferência entre caixa e fundo', replenish: 'Reposição do fundo',
   adjustment: 'Ajuste de conferência', reversal: 'Estorno',
+  operationalSale: 'Venda de produtos', debtReceipt: 'Recebimento de dívida',
 };
 export const ACCOUNTS = { cash: 'Caixa (fora do fundo)', fund: 'Fundo de troco', external: 'Externo' };
 export function money(value) {
@@ -62,9 +63,9 @@ export function summary(day) {
 export function addMovement(day, input) {
   if (day.closing) throw new Error('Caixa fechado: não é possível lançar ou estornar.');
   const type = input.type;
-  if (!Object.hasOwn(TYPES, type) || type === 'reversal') throw new Error('Tipo inválido.');
+  if (!['income', 'expense', 'sale', 'transfer', 'replenish', 'adjustment'].includes(type)) throw new Error('Tipo inválido.');
   const description = text(input.description, 'Descrição');
-  const user = text(input.user, 'Responsável', true, 100);
+  const user = text(input.user ?? '', 'Responsável', type !== 'expense', 100) || 'Não informado';
   let entries;
   if (type === 'income') entries = [entry('external', account(input.account), input.amount, 'income')];
   if (type === 'expense') entries = [entry(account(input.account), 'external', input.amount, 'expense')];
@@ -88,7 +89,7 @@ export function addMovement(day, input) {
   }
   const movement = {
     id: crypto.randomUUID(), dayId: day.id, createdAt: new Date().toISOString(), type,
-    description, user, syncStatus: 'pending', entries,
+    description, user, notes: text(input.notes ?? '', 'Observações', false), syncStatus: 'pending', entries,
     ...(type === 'sale' ? { saleAmount: input.amount, received: input.received } : {}),
   };
   const next = { ...day, movements: [...day.movements, movement] };
@@ -98,10 +99,11 @@ export function addMovement(day, input) {
   cents(balances.cash); cents(balances.fund); cents(balances.cash + balances.fund);
   return next;
 }
-export function reverseMovement(day, id, reason, user) {
+export function reverseMovement(day, id, reason, user, commerce = false) {
   if (day.closing) throw new Error('Caixa fechado: não é possível estornar.');
   const original = day.movements.find(m => m.id === id);
   if (!original || original.type === 'reversal') throw new Error('Lançamento inválido para estorno.');
+  if (original.commerceId && !commerce) throw new Error('Use o estorno da venda ou do recebimento para manter os relatórios consistentes.');
   if (day.movements.some(m => m.reverses === id)) throw new Error('Este lançamento já foi estornado.');
   const movement = {
     id: crypto.randomUUID(), dayId: day.id, createdAt: new Date().toISOString(), type: 'reversal',
@@ -139,4 +141,20 @@ export function openDay(days, input) {
     initialCash, initialFund, referenceFund: 10000, notes: text(input.notes ?? '', 'Observações', false),
     user: text(input.user, 'Responsável', true, 100), movements: [], closing: null,
   };
+}
+
+// Ponte atômica para vendas/recebimentos. Não altera o comportamento do legado.
+export function recordCommerceCash(day, { type, commerceId, entries, description, user }) {
+  if (day.closing) throw new Error('Caixa fechado: não é possível lançar.');
+  if (!['operationalSale', 'debtReceipt'].includes(type)) throw new Error('Operação inválida.');
+  const checked = entries.map(leg => {
+    if (!['cash', 'fund', 'external'].includes(leg.from) || !['cash', 'fund', 'external'].includes(leg.to) || leg.from === leg.to) throw new Error('Origem/destino inválidos.');
+    return { ...leg, amount: positive(leg.amount) };
+  });
+  const movement = { id: crypto.randomUUID(), dayId: day.id, createdAt: new Date().toISOString(), syncStatus: 'pending', type, commerceId, entries: checked, description: text(description, 'Descrição'), user: text(user, 'Responsável', true, 100) };
+  const next = { ...day, movements: [...day.movements, movement] };
+  const s = summary(next);
+  if (s.cash < 0 || s.fund < 0) throw new Error('Saldo insuficiente para o troco. Confira a conta de origem ou transfira antes de lançar.');
+  cents(s.cash); cents(s.fund); cents(s.total);
+  return { day: next, movementId: movement.id };
 }

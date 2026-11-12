@@ -1,3 +1,5 @@
+import { report } from './commerce.js';
+import { setupCommerce, dashboard, dailyDetails, renderCommerce, financialReport } from './commerce-ui.js';
 import { money, summary, openDay, addMovement, reverseMovement, closeDay, TYPES, ACCOUNTS } from './domain.js';
 import { load, save } from './storage.js';
 import { syncStatus } from './sync.js';
@@ -22,7 +24,7 @@ function field(name, title, type = 'text', value = '', extra = '') {
   return `<label>${title}<input name="${name}" type="${type}" value="${escape(value)}" ${extra}></label>`;
 }
 const amount = (name, title, value = '') => field(name, title, 'text', value, 'inputmode="decimal" autocomplete="off" required maxlength="13" placeholder="0,00"');
-const userField = () => field('user', 'Responsável', 'text', responsible, 'required maxlength="100" autocomplete="name"');
+const userField = (optional = false) => field('user', 'Responsável', 'text', responsible, `${optional ? '' : 'required'} maxlength="100" autocomplete="name"`) + (optional ? '<small class="muted">Responsável opcional para saídas.</small>' : '');
 const notes = (title = 'Observações (opcional)') => `<label>${title}<textarea name="notes" maxlength="500" rows="2"></textarea></label>`;
 const description = () => '<label>Descrição / motivo<textarea name="description" required maxlength="500" rows="2"></textarea></label>';
 const selectAccount = (name, title) => `<label>${title}<select name="${name}"><option value="cash">Caixa (fora do fundo)</option><option value="fund">Fundo de troco</option></select></label>`;
@@ -30,25 +32,25 @@ function metric(label, value, tone = '') { return `<div class="metric"><span>${l
 function movementTable(day, editable = false) {
   if (!day.movements.length) return '<p class="muted">Nenhuma movimentação registrada neste caixa.</p>';
   const reversed = new Set(day.movements.filter(m => m.reverses).map(m => m.reverses));
-  return `<div class="table-wrap"><table><thead><tr><th>Horário / responsável</th><th>Movimentação</th><th>Caminho do dinheiro</th><th>Histórico</th></tr></thead><tbody>${[...day.movements].reverse().map(m => `<tr><td>${time(m.createdAt)}<small>${escape(m.user)}</small></td><td><strong>${TYPES[m.type]}</strong><small>${escape(m.description)}</small><small>${m.type === 'sale' ? `Venda líquida: ${brl(m.saleAmount)}` : ''}</small><small>Local · envio pendente</small></td><td>${m.entries.map(leg => `<div>${ACCOUNTS[leg.from]} → ${ACCOUNTS[leg.to]}<br><strong class="amount">${brl(leg.amount)}</strong>${leg.kind === 'saleChange' ? '<small>Troco entregue ao cliente</small>' : ''}</div>`).join('')}</td><td>${m.reverses ? `<small>Estorno de ${escape(m.reverses)}</small>` : reversed.has(m.id) ? '<span class="badge closed">Estornado</span>' : editable ? `<button class="secondary" data-reverse="${m.id}">Estornar</button>` : 'Registrado'}<small>ID: ${escape(m.id)}</small></td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Horário / responsável</th><th>Movimentação</th><th>Caminho do dinheiro</th><th>Histórico</th></tr></thead><tbody>${[...day.movements].reverse().map(m => `<tr><td>${time(m.createdAt)}<small>${escape(m.user)}</small></td><td><strong>${TYPES[m.type]}</strong><small>${escape(m.description)}</small><small>${escape(m.notes ?? '')}</small><small>${m.type === 'sale' ? `Venda líquida: ${brl(m.saleAmount)}` : ''}</small><small>Local · envio pendente</small></td><td>${m.entries.map(leg => `<div>${ACCOUNTS[leg.from]} → ${ACCOUNTS[leg.to]}<br><strong class="amount">${brl(leg.amount)}</strong>${leg.kind === 'saleChange' ? '<small>Troco entregue ao cliente</small>' : ''}</div>`).join('')}</td><td>${m.reverses ? `<small>Estorno de ${escape(m.reverses)}</small>` : reversed.has(m.id) ? '<span class="badge closed">Estornado</span>' : editable && !m.commerceId ? `<button class="secondary" data-reverse="${m.id}">Estornar</button>` : 'Registrado'}<small>ID: ${escape(m.id)}</small></td></tr>`).join('')}</tbody></table></div>`;
 }
 function fundPanel(day) {
   const s = summary(day);
-  return `<section class="panel fund"><div class="section-heading"><h2>Fundo de troco</h2><span class="badge ${s.missing ? 'closed' : ''}">${s.missing ? 'Reposição pendente' : s.excess ? 'Acima da referência' : 'Fundo completo'}</span></div><div class="cards">${metric('Valor de referência', day.referenceFund)}${metric('Disponível no fundo', s.fund)}${metric('Falta para recompor', s.missing, s.missing ? 'warning' : 'good')}${metric('Excedente', s.excess)}</div><p class="muted">Reposição é transferência do caixa para o fundo. Pendência de reposição não é diferença de conferência.</p></section>`;
+  return `<section class="panel fund"><div class="section-heading"><h2>Fundo de troco</h2><span class="badge ${s.missing ? 'closed' : ''}">${s.missing ? 'Reposição pendente' : s.excess ? 'Acima da referência' : 'Fundo completo'}</span></div><div class="cards">${metric('Valor de referência', day.referenceFund)}${metric('Disponível no fundo', s.fund)}${metric('Falta para recompor', s.missing, s.missing ? 'warning' : 'good')}${metric('Excedente', s.excess)}</div><p class="muted">Reposição é transferência do caixa para o fundo. Pendência de reposição não é diferença de conferência.</p><p><strong>Notas pequenas e moedas:</strong> ${day.smallNotesNeeded ? 'Faltam notas pequenas/moedas (sem alterar o saldo)' : 'Sem alerta de falta de notas pequenas'}</p>${!day.closing ? '<button id="small-notes" class="secondary">Conferir notas e moedas</button>' : ''}</section>`;
 }
 function closingPanel(day) {
   const c = day.closing;
   if (!c) return '';
-  return `<section class="panel"><div class="section-heading"><h2>Fechamento · ${dayDate(day.date)}</h2><span class="badge closed">Fechado</span></div><p>Conferido por ${escape(c.user)} em ${time(c.createdAt)}.</p><div class="cards">${metric('Entradas físicas brutas', c.expected.income)}${metric('Saídas físicas brutas (inclui troco)', c.expected.expense)}${metric('Vendas em espécie (líquidas)', c.expected.sales)}${metric('Transferências (volume movimentado)', c.expected.transfers)}</div><div class="table-wrap"><table><thead><tr><th>Conferência</th><th>Esperado</th><th>Contado</th><th>Diferença</th></tr></thead><tbody><tr><td>Caixa, fora do fundo</td><td>${brl(c.expected.cash)}</td><td>${brl(c.countedCash)}</td><td>${brl(c.cashDifference)}</td></tr><tr><td>Fundo de troco</td><td>${brl(c.expected.fund)}</td><td>${brl(c.countedFund)}</td><td>${brl(c.fundDifference)}</td></tr><tr><td><strong>Total físico</strong></td><td>${brl(c.expected.total)}</td><td>${brl(c.countedCash + c.countedFund)}</td><td><strong>${brl(c.difference)}</strong></td></tr></tbody></table></div><p class="help">Reposição do fundo pelo saldo esperado: ${brl(c.expected.missing)}. Pelo dinheiro contado: ${brl(Math.max(0, day.referenceFund - c.countedFund))}. Esses valores não são perdas de caixa.</p><p>Observações: ${escape(c.notes || 'Sem observações.')}</p><p class="muted">Ajustes líquidos registrados: ${brl(c.expected.adjustments)}. Estornos estão incluídos no histórico. Transferências mostram o volume físico, incluindo devoluções e estornos.</p><button data-print class="secondary">Imprimir resumo e histórico</button></section>`;
+  return `<section class="panel"><div class="section-heading"><h2>Fechamento · ${dayDate(day.date)}</h2><span class="badge closed">Fechado</span></div><p>Conferido por ${escape(c.user)} em ${time(c.createdAt)}.</p><div class="cards">${metric('Entradas físicas brutas', c.expected.income)}${metric('Saídas físicas brutas (inclui troco)', c.expected.expense)}${metric('Vendas em espécie (líquidas)', c.expected.sales)}${metric('Transferências (volume movimentado)', c.expected.transfers)}</div><div class="table-wrap"><table><thead><tr><th>Conferência</th><th>Esperado</th><th>Contado</th><th>Diferença</th></tr></thead><tbody><tr><td>Caixa, fora do fundo</td><td>${brl(c.expected.cash)}</td><td>${brl(c.countedCash)}</td><td>${brl(c.cashDifference)}</td></tr><tr><td>Fundo de troco</td><td>${brl(c.expected.fund)}</td><td>${brl(c.countedFund)}</td><td>${brl(c.fundDifference)}</td></tr><tr><td><strong>Total físico</strong></td><td>${brl(c.expected.total)}</td><td>${brl(c.countedCash + c.countedFund)}</td><td><strong>${brl(c.difference)}</strong></td></tr></tbody></table></div><p class="help">Reposição do fundo pelo saldo esperado: ${brl(c.expected.missing)}. Pelo dinheiro contado: ${brl(Math.max(0, day.referenceFund - c.countedFund))}. Esses valores não são perdas de caixa.</p><p>Observações: ${escape(c.notes || 'Sem observações.')}</p><p class="muted">Ajustes líquidos registrados: ${brl(c.expected.adjustments)}. Estornos estão incluídos no histórico. Transferências mostram o volume físico, incluindo devoluções e estornos.</p>${c.commerce ? financialReport(c.commerce, 'Resumo financeiro registrado no fechamento') : ''}<button data-print class="secondary">Imprimir resumo e histórico</button></section>`;
 }
 function renderCurrent() {
   const day = state.days.find(day => !day.closing);
   if (!day) {
-    $('#current').innerHTML = '<section class="panel empty"><span class="eyebrow">PRONTO PARA COMEÇAR</span><h2>Nenhum caixa aberto</h2><p>Informe os saldos separados do caixa e do fundo de troco para iniciar o expediente. O fundo tem referência de R$ 100,00.</p><button id="open-day">Abrir caixa</button></section>';
+    $('#current').innerHTML = `<section class="panel empty"><span class="eyebrow">PRONTO PARA COMEÇAR</span><h2>Nenhum caixa aberto</h2><p>Hoje: ${dayDate(today())}</p><p>Informe os saldos separados do caixa e do fundo de troco para iniciar o expediente. O fundo tem referência de R$ 100,00.</p><button id="open-day">Abrir caixa</button></section>`;
     return;
   }
   const s = summary(day);
-  $('#current').innerHTML = `<div class="section-heading"><div><h2>Expediente de ${dayDate(day.date)}</h2><span class="muted">Aberto por ${escape(day.user)} · ${escape(day.notes)}</span></div><span class="badge">Caixa aberto</span></div><div class="cards">${metric('Caixa inicial (fora do fundo)', day.initialCash)}${metric('Entradas físicas brutas', s.income)}${metric('Saídas físicas brutas (inclui troco)', s.expense)}${metric('Caixa esperado (fora do fundo)', s.cash)}</div><p class="help"><strong>Total físico esperado: ${brl(s.total)}</strong> = caixa ${brl(s.cash)} + fundo ${brl(s.fund)}. Vendas em espécie líquidas: ${brl(s.sales)}. Entradas e saídas brutas incluem recebimentos e troco; transferências ficam fora desses totais.</p>${fundPanel(day)}<section class="panel"><h2>Registrar movimentação</h2><div class="actions"><button data-move="sale">Venda em espécie</button><button data-move="replenish">Repor fundo</button><button data-move="income" class="secondary">Entrada</button><button data-move="expense" class="secondary">Saída</button><button data-move="transfer" class="secondary">Transferir</button><button data-move="adjustment" class="secondary">Ajustar</button></div></section><section class="panel"><div class="section-heading"><h2>Movimentações do expediente</h2><button id="close-day" class="secondary">Conferir e fechar caixa</button></div>${movementTable(day, true)}</section>`;
+  $('#current').innerHTML = `<div class="section-heading"><div><h2>Expediente de ${dayDate(day.date)}</h2><span class="muted">Aberto por ${escape(day.user)} · ${escape(day.notes)}</span></div><div class="actions"><span class="badge">Caixa aberto</span><button data-close-day class="secondary">Conferir e fechar caixa</button></div></div>${dashboard(state, day)}<div class="cards">${metric('Caixa inicial (fora do fundo)', day.initialCash)}${metric('Entradas físicas brutas', s.income)}${metric('Saídas físicas brutas (inclui troco)', s.expense)}${metric('Caixa esperado (fora do fundo)', s.cash)}</div><p class="help"><strong>Total físico esperado: ${brl(s.total)}</strong> = caixa ${brl(s.cash)} + fundo ${brl(s.fund)}. Vendas em espécie líquidas: ${brl(s.sales)}. Entradas e saídas brutas incluem recebimentos e troco; transferências ficam fora desses totais.</p>${fundPanel(day)}${dailyDetails(state, day)}<section class="panel"><h2>Movimentações avulsas de dinheiro</h2><p class="muted">Use Nova venda para registrar produtos. A venda em espécie avulsa é mantida para compatibilidade, sem classificar gás/água. Não lance a mesma venda nas duas opções.</p><div class="actions"><button data-move="sale">Venda em espécie</button><button data-move="replenish">Repor fundo</button><button data-move="income" class="secondary">Entrada</button><button data-move="expense" class="secondary">Saída</button><button data-move="transfer" class="secondary">Transferir</button><button data-move="adjustment" class="secondary">Ajustar</button></div></section><section class="panel"><div class="section-heading"><h2>Movimentações do expediente</h2><button id="close-day" class="secondary">Fechar caixa</button></div>${movementTable(day, true)}</section>`;
 }
 function renderHistory() {
   const filter = $('#history-date').value;
@@ -58,8 +60,8 @@ function renderHistory() {
   $('#history-detail').innerHTML = day ? `<section class="panel"><h2>Abertura · ${dayDate(day.date)}</h2><p>Responsável: ${escape(day.user)} · ${time(day.createdAt)}</p><p>Caixa inicial: ${brl(day.initialCash)} · Fundo inicial: ${brl(day.initialFund)} · Total físico inicial: ${brl(day.initialCash + day.initialFund)}</p><p>Observações: ${escape(day.notes || 'Sem observações.')}</p></section>${closingPanel(day)}${fundPanel(day)}<section class="panel"><h2>Histórico completo de movimentações</h2>${movementTable(day)}</section>` : '';
 }
 function render() {
-  renderCurrent(); renderHistory();
-  const sync = syncStatus(state.days);
+  renderCurrent(); renderHistory(); renderCommerce(state);
+  const sync = syncStatus(state.days, state.business.events.length);
   $('#sync').textContent = `${sync.pending} registros locais pendentes de envio · serviço remoto não configurado`;
 }
 async function commit(transform) {
@@ -79,6 +81,7 @@ async function commit(transform) {
 }
 function openModal(title, fields, action, submit = 'Confirmar e salvar') {
   $('#modal-title').textContent = title;
+  $('#modal-fields').oninput = null; $('#modal-fields').onchange = null; $('#modal-fields').onclick = null;
   $('#modal-fields').innerHTML = fields;
   $('#modal-error').textContent = '';
   $('#submit').textContent = submit;
@@ -105,7 +108,7 @@ function movement(type) {
   else if (type === 'transfer') fields = selectAccount('from', 'Origem') + selectAccount('to', 'Destino') + amount('amount', 'Valor da transferência (R$)');
   else fields = selectAccount('account', type === 'income' ? 'Destino' : 'Conta') + (type === 'adjustment' ? '<p class="help">Ajuste altera o saldo esperado. Não use para esconder uma diferença: registre a justificativa. Também é possível registrar a diferença apenas no fechamento.</p><label>Direção<select name="direction"><option value="increase">Acrescentar ao saldo</option><option value="decrease">Reduzir o saldo</option></select></label>' : '') + amount('amount', 'Valor (R$)');
   const expectedDayId = state.days.find(day => !day.closing).id;
-  openModal(TYPES[type], fields + description() + userField(), async values => commit(next => {
+  openModal(TYPES[type], fields + description() + (type === 'expense' ? notes() : '') + userField(type === 'expense'), async values => commit(next => {
     const day = activeDay(next);
     if (day.id !== expectedDayId) throw new Error('O expediente mudou. Confira a tela e repita o lançamento.');
     return replaceDay(next, addMovement(day, { ...values, type, amount: money(values.amount), ...(type === 'sale' ? { received: money(values.received) } : {}) }));
@@ -120,6 +123,7 @@ function closing() {
       const current = activeDay(next);
       if (current.id !== day.id) throw new Error('O expediente mudou. Confira a tela.');
       const closed = closeDay(current, { ...values, countedCash: money(values.countedCash), countedFund: money(values.countedFund) });
+      closed.closing.commerce = report(next, current.id);
       return replaceDay(next, closed);
     });
     if (ok) { selectedHistory = day.id; showTab('history'); renderHistory(); }
@@ -136,14 +140,15 @@ function reversal(id) {
   }), 'Confirmar estorno');
 }
 function showTab(tab) {
-  $('#current').hidden = tab !== 'current'; $('#history').hidden = tab !== 'history';
-  for (const name of ['current', 'history']) {
+  for (const name of ['current', 'sales', 'deliveries', 'receipts', 'history', 'settings']) {
+    $(`#${name}`).hidden = name !== tab;
     const button = $(`#tab-${name}`);
     if (tab === name) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   }
 }
 $('#tab-current').onclick = () => showTab('current');
 $('#tab-history').onclick = () => showTab('history');
+for (const tab of ['sales','deliveries','receipts','settings']) $(`#tab-${tab}`).onclick = () => showTab(tab);
 $('#history-date').oninput = renderHistory;
 $('#cancel').onclick = $('#cancel-modal').onclick = () => { if (!busy) $('#modal').close(); };
 $('#modal').addEventListener('cancel', event => { if (busy) event.preventDefault(); });
@@ -177,7 +182,7 @@ document.addEventListener('click', event => {
   const button = event.target.closest('button');
   if (!button || !state) return;
   if (button.id === 'open-day') opening();
-  if (button.id === 'close-day') closing();
+  if (button.id === 'close-day' || button.hasAttribute('data-close-day')) closing();
   if (button.dataset.move) movement(button.dataset.move);
   if (button.dataset.reverse) reversal(button.dataset.reverse);
   if (button.dataset.history) { selectedHistory = button.dataset.history; renderHistory(); }
@@ -201,6 +206,7 @@ if (channel) channel.onmessage = async () => {
   if (busy) return;
   try { state = await load(); render(); } catch (error) { showError(error); }
 };
+setupCommerce({ getState: () => state, commit, openModal, userField, field, amount, notes, escape, brl, time, showTab, showError });
 try {
   state = await load(); render();
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});

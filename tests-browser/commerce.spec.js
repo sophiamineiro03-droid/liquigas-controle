@@ -1,0 +1,240 @@
+import { test, expect } from '@playwright/test';
+async function open(page) {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Abrir caixa', exact: true }).click();
+  await page.getByLabel('Caixa inicial — fora do fundo (R$)').fill('500,00');
+  await page.getByLabel('Responsável', { exact: true }).fill('Atendente');
+  await page.locator('#submit').click();
+  await expect(page.locator('dialog')).not.toBeVisible();
+}
+const state = page => page.evaluate(async () => (await import('/storage.js')).load());
+async function submit(page) {
+  await page.getByLabel('Responsável', { exact: true }).fill('Atendente');
+  await page.locator('#submit').click();
+  await expect(page.locator('dialog')).not.toBeVisible();
+}
+async function regularSale(page, method = 'cash', customer = 'Maria') {
+  await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
+  await page.getByLabel('Nome do cliente', { exact: true }).fill(customer);
+  await page.getByLabel('Valor total destes produtos (R$)', { exact: true }).fill('120,00');
+  await page.getByLabel('Forma de pagamento dos produtos', { exact: true }).selectOption(method);
+  await page.getByLabel('Valor deste pagamento (R$)', { exact: true }).fill('120,00');
+  await submit(page);
+}
+
+test('venda mista, pagamentos por categoria, revisão auditável e cancelamento', async ({ page }) => {
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await open(page);
+  await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
+  await page.getByLabel('Nome do cliente', { exact: true }).fill('Maria');
+  await page.locator('.item-row').first().getByLabel('Quantidade', { exact: true }).fill('2');
+  await page.locator('.item-row').first().getByLabel('Valor total destes produtos (R$)').fill('240,00');
+  await page.getByRole('button', { name: 'Adicionar produto' }).click();
+  await page.locator('.item-row').nth(1).getByLabel('Produto', { exact: true }).selectOption('water20');
+  await page.locator('.item-row').nth(1).getByLabel('Quantidade', { exact: true }).fill('3');
+  await page.locator('.item-row').nth(1).getByLabel('Valor total destes produtos (R$)').fill('30,00');
+  await page.locator('.payment-row').first().getByLabel('Valor deste pagamento (R$)').fill('100,00');
+  await page.getByRole('button', { name: 'Dividir / adicionar pagamento' }).click();
+  await page.locator('.payment-row').nth(1).getByLabel('Forma de pagamento dos produtos').selectOption('pix');
+  await page.locator('.payment-row').nth(1).getByLabel('Valor deste pagamento (R$)').fill('140,00');
+  await page.getByRole('button', { name: 'Dividir / adicionar pagamento' }).click();
+  await page.locator('.payment-row').nth(2).getByLabel('Categoria do pagamento').selectOption('water');
+  await page.locator('.payment-row').nth(2).getByLabel('Forma de pagamento dos produtos').selectOption('debit');
+  await page.locator('.payment-row').nth(2).getByLabel('Valor deste pagamento (R$)').fill('30,00');
+  await page.getByLabel('Dinheiro entregue pelo cliente', { exact: false }).fill('150,00');
+  await page.getByLabel('Observações da venda', { exact: true }).fill('Entregar após as 15h');
+  await expect(page.locator('#order-change')).toContainText('50,00');
+  await submit(page);
+  let data = await state(page);
+  expect(data.business.sales[0].items).toHaveLength(2);
+  expect(data.business.sales[0].payments).toHaveLength(3);
+  await expect(page.locator('.daily-overview')).toContainText('240,00');
+  await expect(page.locator('.fund')).toContainText('50,00');
+  await page.getByRole('button', { name: 'Corrigir venda', exact: true }).click();
+  await page.locator('.item-row').nth(1).getByLabel('Quantidade', { exact: true }).fill('4');
+  await page.getByLabel('Justificativa da correção').fill('Quantidade de água informada incorretamente');
+  await submit(page);
+  data = await state(page);
+  expect(data.business.sales[0].items[1].quantity).toBe(4);
+  expect(data.business.events.at(-1).type).toBe('saleEdited');
+  expect(data.days[0].movements).toHaveLength(3);
+  await page.getByRole('button', { name: 'Cancelar e estornar', exact: true }).click();
+  await page.getByLabel('Justificativa do estorno').fill('Pedido cancelado e valores devolvidos');
+  await submit(page);
+  data = await state(page);
+  expect(data.business.sales[0].canceled).toBe(true);
+  expect(data.days[0].movements).toHaveLength(4);
+  expect(errors).toEqual([]);
+});
+
+test('Gás do Povo e taxa de entrega separada, preço configurável e atualização RevGás', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
+  await page.getByLabel('Nome do cliente', { exact: true }).fill('Ana');
+  await page.getByLabel('Pagamento pelo Gás do Povo', { exact: true }).check();
+  await expect(page.getByLabel('Valor total destes produtos (R$)')).toHaveValue('107,98');
+  await page.getByLabel('Haverá entrega com taxa?', { exact: true }).check();
+  await page.getByLabel('Taxa de entrega (R$)', { exact: true }).fill('10,00');
+  await page.getByLabel('Responsável pela entrega / retirada', { exact: true }).selectOption('Wagner');
+  await page.getByLabel('Situação da entrega', { exact: true }).selectOption('awaiting');
+  await submit(page);
+  const data = await state(page);
+  const report = await page.evaluate(async () => { const d = await (await import('/storage.js')).load(); return (await import('/commerce.js')).report(d, d.days[0].id); });
+  expect(report.sales).toBe(11798); expect(report.payments.cash).toBe(1000);
+  expect(report.physical.cash).toBe(51000); expect(report.physical.fund).toBe(10000);
+  await page.getByRole('button', { name: 'Configurações', exact: true }).click();
+  await page.getByRole('button', { name: 'Alterar valor padrão' }).click();
+  await page.getByLabel('Valor por P13 (R$)', { exact: true }).fill('110,00');
+  await submit(page);
+  expect((await state(page)).business.sales[0].benefitPrice).toBe(10798);
+  expect((await state(page)).business.benefitPrice).toBe(11000);
+  await page.getByRole('button', { name: 'Entregas e retiradas', exact: true }).click();
+  await page.locator('#delivery-driver').selectOption('Wagner');
+  await expect(page.locator('#deliveries-list')).toContainText('Ana');
+  await page.getByRole('button', { name: 'Atualizar entrega / observações / RevGás', exact: true }).click();
+  await page.getByLabel('Situação da entrega', { exact: true }).selectOption('delivered');
+  await page.getByLabel('Lançamento no RevGás', { exact: true }).selectOption('yes');
+  await page.getByLabel('Motivo da atualização').fill('Entrega e lançamento no RevGás confirmados');
+  await submit(page);
+  expect((await state(page)).business.sales[0].posted).toBe(true);
+  expect((await state(page)).business.sales[0].delivery.status).toBe('delivered');
+  expect((await state(page)).business.sales[0].id).toBe(data.business.sales[0].id);
+  await page.screenshot({ path: '/tmp/liquigas-entregas-v2.png', fullPage: true });
+  await page.getByRole('button', { name: 'Caixa do dia', exact: true }).click();
+  await page.getByRole('button', { name: 'Conferir e fechar caixa', exact: true }).click();
+  await page.getByLabel('Caixa contado — fora do fundo (R$)').fill('510,00');
+  await page.getByLabel('Fundo de troco contado (R$)').fill('100,00');
+  await submit(page);
+  const closed = (await state(page)).days[0].closing;
+  expect(closed.difference).toBe(0);
+  expect(closed.commerce.categories.gas.sold).toBe(11798);
+  expect(closed.commerce.payments.benefit).toBe(10798);
+  await expect(page.locator('#history-detail')).toContainText('Resumo financeiro registrado no fechamento');
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('#history-detail')).toBeVisible();
+  const pdf = await page.pdf({ path: '/tmp/liquigas-fechamento-operacional.pdf', format: 'A4' });
+  expect(pdf.byteLength).toBeGreaterThan(1000);
+
+});
+
+test('fiado, pagamento parcial, recebimento sem vínculo e estorno preservam faturamento', async ({ page }) => {
+  await open(page);
+  await regularSale(page, 'creditSale', 'José');
+  await page.getByRole('button', { name: 'Receber dívida', exact: true }).click();
+  await page.getByLabel('Valor efetivamente recebido (R$)').fill('60,00');
+  await page.getByLabel('Forma de pagamento do recebimento').selectOption('pix');
+  await submit(page);
+  let data = await state(page);
+  expect(data.business.receipts[0].saleId).toBe(data.business.sales[0].id);
+  await expect(page.locator('.daily-overview')).toContainText('60,00');
+  await page.getByRole('button', { name: 'Recebimentos', exact: true }).click();
+  await page.locator('#receipts').getByRole('button', { name: 'Novo recebimento', exact: true }).click();
+  await page.getByLabel('Nome do cliente', { exact: true }).fill('Dívida antiga');
+  await page.getByLabel('Categoria do recebimento antigo').selectOption('water');
+  await page.getByLabel('Valor efetivamente recebido (R$)').fill('10,00');
+  await submit(page);
+  await expect(page.locator('#receipts-list')).toContainText('Saldo anterior e restante desconhecidos');
+  data = await state(page);
+  expect(data.business.receipts).toHaveLength(2);
+  await page.locator('#receipts-list .sale-card').first().getByRole('button', { name: 'Estornar recebimento' }).click();
+  await page.getByLabel('Justificativa do estorno').fill('Pix não recebido');
+  await submit(page);
+  const r = await page.evaluate(async () => { const d = await (await import('/storage.js')).load(); return (await import('/commerce.js')).report(d, d.days[0].id); });
+  expect(r.sales).toBe(12000); expect(r.pending).toBe(12000); expect(r.payments.cash).toBe(1000); expect(r.payments.pix).toBe(0);
+});
+
+test('novas vendas funcionam offline e layout móvel não transborda', async ({ page, context }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  await expect(page.locator('#offline-ready')).toContainText('disponível offline');
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true })); });
+  await context.setOffline(true); await page.reload();
+  await regularSale(page, 'pix', 'Cliente offline');
+  await page.reload();
+  await expect(page.locator('#current')).toContainText('Cliente offline');
+  expect((await state(page)).business.sales).toHaveLength(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: '/tmp/liquigas-painel-mobile-v2.png', fullPage: true });
+});
+
+test('dados legados são preservados ao abrir a nova interface', async ({ page }) => {
+  await page.goto('/');
+  const before = await page.evaluate(async () => {
+    const { database } = await import('/storage.js');
+    const { openDay, addMovement } = await import('/domain.js');
+    let day = openDay([], { date: '2026-11-10', initialCash: 10000, initialFund: 10000, user: 'Antiga atendente' });
+    day = addMovement(day, { type: 'sale', amount: 12000, received: 12000, description: 'Lançamento preservado', user: 'Antiga atendente' });
+    const old = { version: 1, revision: 2, days: [day] };
+    const db = await database();
+    await new Promise((resolve,reject) => { const tx = db.transaction('state','readwrite'); tx.objectStore('state').put(old,'ledger'); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+    return old;
+  });
+  await page.reload();
+  await expect(page.locator('#current')).toContainText('Lançamento preservado');
+  await expect(page.locator('.daily-overview')).toContainText('vendas avulsas antigas');
+  const after = await state(page);
+  expect(after.days).toEqual(before.days); expect(after.revision).toBe(2); expect(after.business.sales).toHaveLength(0);
+});
+
+test('taxa pendente do benefício só vira recebida ao registrar quitação', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
+  await page.getByLabel('Nome do cliente', { exact: true }).fill('Francisca');
+  await page.getByLabel('Pagamento pelo Gás do Povo', { exact: true }).check();
+  await page.getByLabel('Haverá entrega com taxa?', { exact: true }).check();
+  await page.getByLabel('Taxa de entrega (R$)', { exact: true }).fill('10,00');
+  await page.getByLabel('Situação do pagamento da taxa', { exact: true }).selectOption('pending');
+  await page.getByLabel('Responsável pela entrega / retirada', { exact: true }).selectOption('Vinicius');
+  await page.getByLabel('Situação da entrega', { exact: true }).selectOption('awaiting');
+  await submit(page);
+  await page.getByRole('button', { name: 'Receber dívida', exact: true }).click();
+  await page.getByLabel('Valor efetivamente recebido (R$)').fill('10,00');
+  await page.getByLabel('Forma de pagamento do recebimento').selectOption('pix');
+  await submit(page);
+  const r = await page.evaluate(async () => { const d = await (await import('/storage.js')).load(); return (await import('/commerce.js')).report(d, d.days[0].id); });
+  expect(r.sales).toBe(11798); expect(r.received).toBe(11798);
+  expect(r.payments.cash).toBe(0); expect(r.payments.pix).toBe(1000);
+  expect(r.pending).toBe(0); expect(r.physical.total).toBe(60000);
+  await expect(page.locator('#current')).toContainText('Quitada por recebimentos');
+});
+
+test('saída sem responsável e alerta de notas pequenas preservam a contabilidade', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Conferir notas e moedas' }).click();
+  await page.getByLabel('Situação das notas pequenas').selectOption('yes');
+  await page.getByLabel('Observação da conferência de notas').fill('Precisa trocar nota de cinquenta');
+  await submit(page);
+  await expect(page.locator('.fund')).toContainText('Faltam notas pequenas/moedas');
+  await page.getByRole('button', { name: 'Nova saída', exact: true }).click();
+  await page.getByLabel('Valor (R$)', { exact: true }).fill('50,00');
+  await page.getByLabel('Descrição / motivo').fill('Pagamento de conta');
+  await page.getByLabel('Observações (opcional)', { exact: true }).fill('Recibo guardado');
+  await page.getByLabel('Responsável', { exact: true }).fill('');
+  await page.locator('#submit').click();
+  await expect(page.locator('dialog')).not.toBeVisible();
+  const r = await page.evaluate(async () => { const d = await (await import('/storage.js')).load(); return (await import('/commerce.js')).report(d, d.days[0].id); });
+  expect(r.expense).toBe(5000); expect(r.physical.cash).toBe(45000); expect(r.physical.fund).toBe(10000);
+  expect(r.received).toBe(0); expect(r.expenses[0].user).toBe('Não informado');
+  expect(r.expenses[0].notes).toBe('Recibo guardado');
+});
+
+test('benefício e água são cadastrados juntos sem transformar o benefício em dinheiro', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Nova venda', exact: true }).click();
+  await page.getByLabel('Nome do cliente', { exact: true }).fill('Cliente com gás e água');
+  await page.getByLabel('Pagamento pelo Gás do Povo', { exact: true }).check();
+  await page.getByRole('button', { name: 'Adicionar produto' }).click();
+  await page.locator('.item-row').nth(1).getByLabel('Produto', { exact: true }).selectOption('water20');
+  await page.locator('.item-row').nth(1).getByLabel('Valor total destes produtos (R$)').fill('10,00');
+  await page.getByLabel('Categoria do pagamento', { exact: true }).selectOption('water');
+  await page.getByLabel('Forma de pagamento dos produtos', { exact: true }).selectOption('pix');
+  await page.getByLabel('Valor deste pagamento (R$)', { exact: true }).fill('10,00');
+  await submit(page);
+  const current = await state(page);
+  expect(current.business.sales[0].items[0].benefit).toBe(true);
+  expect(current.business.sales[0].items[1].benefit).toBe(false);
+  const r = await page.evaluate(async () => { const d = await (await import('/storage.js')).load(); return (await import('/commerce.js')).report(d, d.days[0].id); });
+  expect(r.benefitQuantity).toBe(1); expect(r.quantities.water20.sold).toBe(1);
+  expect(r.payments.benefit).toBe(10798); expect(r.payments.pix).toBe(1000);
+  expect(r.physical.total).toBe(60000);
+});
