@@ -82,3 +82,17 @@ Valores são exibidos em reais; horários no fuso `America/Sao_Paulo`. Para atua
 `vercel.json` serve `public` como site estático, sem instalação/build e sem funções necessárias. O endpoint local `/api/health` não existe nessa hospedagem. CSP e cabeçalhos de segurança também estão configurados. O projeto já tem deploy automático conectado à branch `main`; um push nessa branch pode publicar imediatamente. Não envie mudanças para `main` sem considerar essa publicação.
 
 Preset Other, raiz do repositório e saída `public`; configurações antigas que sobrescrevam o arquivo precisam ser revistas. A hospedagem não adiciona autenticação, backup ou sincronização. Endereços publicados e locais têm armazenamentos separados. Esta evolução não exige configurar nenhum serviço externo.
+
+## Backend PostgreSQL preparado para revisão
+
+A proposta de Supabase está em [docs/backend/README.md](docs/backend/README.md), com cinco migrações versionadas, RLS, funções transacionais, idempotência, fechamento coordenado e testes locais de banco. Inclui rascunhos editáveis como caderno: informações incompletas não são presumidas como fiado ou recebimento; a confirmação financeira é separada.
+
+**O frontend continua local e sem Supabase.** Nenhum SQL remoto, login, credencial, importação real ou sincronização foi configurado nesta etapa. O formulário atual ainda não utiliza os rascunhos do banco; sua adaptação será posterior à revisão.
+
+Para testar somente um PostgreSQL descartável local, com Node 24 e Docker:
+
+```sh
+npm run test:db
+```
+
+O runner cria um container sem rede/portas, aplica fixtures Auth mínimos e migrações, executa testes de integridade/RLS/concorrência e remove o container. Não aceita endereço de banco remoto. Leia os limites do teste e o procedimento de primeira administradora antes de qualquer execução futura no Supabase.

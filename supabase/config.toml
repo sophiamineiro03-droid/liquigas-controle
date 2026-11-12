@@ -1,0 +1,11 @@
+# Configuração de desenvolvimento/revisão; não altera um projeto hospedado.
+project_id = "liquigas-controle"
+
+[auth]
+enable_signup = false
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = false
+double_confirm_changes = true
+enable_confirmations = true
